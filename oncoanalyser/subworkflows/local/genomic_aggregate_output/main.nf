@@ -361,8 +361,29 @@ data_filename: data_mutational_signatures_counts_ID.txt
 generic_entity_meta_properties: NAME
     """
 
-        meta_text_all = channel.of(meta_text_seg, meta_text_long, meta_text_sv, meta_text_expression, meta_text_mutations, meta_text_sigs, meta_text_counts, meta_text_sigs_dbs, meta_text_counts_dbs, meta_text_sigs_id, meta_text_counts_id)
-        file_name_all = channel.of("cna_hg38", "cna_long", "sv", "expression", "sequenced", "mutational_signatures_contribution_SBS", "mutational_signatures_counts_SBS", "mutational_signatures_contribution_DBS", "mutational_signatures_counts_DBS", "mutational_signatures_contribution_ID", "mutational_signatures_counts_ID")
+        // expression meta file is only emitted in DNA+RNA ("both") mode — a dna-only study
+        // never produces data_expression.txt, so a meta file pointing at it would be an
+        // orphan entry that breaks cBioPortal import
+        meta_entries = [
+            ["cna_hg38", meta_text_seg],
+            ["cna_long", meta_text_long],
+            ["sv", meta_text_sv],
+        ]
+        if (params.type != 'dna-only') {
+            meta_entries << ["expression", meta_text_expression]
+        }
+        meta_entries += [
+            ["sequenced", meta_text_mutations],
+            ["mutational_signatures_contribution_SBS", meta_text_sigs],
+            ["mutational_signatures_counts_SBS", meta_text_counts],
+            ["mutational_signatures_contribution_DBS", meta_text_sigs_dbs],
+            ["mutational_signatures_counts_DBS", meta_text_counts_dbs],
+            ["mutational_signatures_contribution_ID", meta_text_sigs_id],
+            ["mutational_signatures_counts_ID", meta_text_counts_id],
+        ]
+
+        file_name_all = channel.fromList(meta_entries.collect { it[0] })
+        meta_text_all  = channel.fromList(meta_entries.collect { it[1] })
         all_groups_meta = all_groups.combine(file_name_all).map { g, _f -> g }
 
         GENERATE_META_FILE(

@@ -175,6 +175,15 @@ def validateInputParameters() {
         error("Error: Invalid pipeline mode chosen. Choices : 'genomic', 'clinical', or 'both'")
     }
 
+    // check sequencing data type
+    if (!params.type) {
+        params.type = "both"
+    }
+    params.type = params.type.toLowerCase()
+    if ( !(params.type in ['both', 'dna-only']) ) {
+        error("ERROR: Invalid --type value '${params.type}'. Choices: 'both' or 'dna-only'")
+    }
+
     // make sure there's input
     if (params.mode in ["genomic", "both"] && !params.genomic_samplesheet){
         error("ERROR: Could not find genomic samplesheet. Not running any tests. Check input in nextflow.config")

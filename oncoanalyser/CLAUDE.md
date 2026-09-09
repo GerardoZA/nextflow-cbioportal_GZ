@@ -4,6 +4,7 @@ Oncoanalyser WGS/WTS + clinical CSVs → cBioPortal. HPC-only (SLURM + Apptainer
 
 ## Key Rules
 
+- `--type both` (default) or `--type dna-only` — dna-only skips all RNA-derived processing (Isofox expression, Isofox fusion, SAGE RNA-append integration into mutations) and omits the expression profile/meta file, even if RNA files exist on disk. Validated in `subworkflows/local/utils/main.nf`. Mutational signature fitting (Sigs) is unaffected either way — it's DNA-only already (PAVE somatic VCF).
 - R scripts → `container_r`; Python → `container_python`; SigProfiler → `container_sigprofiler`
 - `data_sv.txt` rows require Hugo symbols at both sites — filter unannotated rows
 - SV classification (`gen_esvee_sv_to_cbioportal.R`): BND ALT strand → `(+,-)` DEL, `(-,+)` DUP, `(+,+)/(−,−)` INV, diff chr TRANSLOC. DNA SVs: `DNA_Support=Yes, RNA_Support=No`

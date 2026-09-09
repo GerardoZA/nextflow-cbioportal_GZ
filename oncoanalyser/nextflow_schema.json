@@ -46,6 +46,13 @@
                     "description": "The pipeline mode you'd like to run. Either 'clinical', 'genomic', or 'both'",
                     "enum": ["clinical", "genomic", "both"],
                     "fa_icon": "fas fa-folder-open"
+                },
+                "type": {
+                    "type": "string",
+                    "description": "Sequencing data type for the genomic workflow. Either 'both' (DNA+RNA, default) or 'dna-only'. In 'dna-only' mode, RNA-derived processing (Isofox expression/fusion, SAGE RNA-append integration) is skipped entirely, even if RNA files are present.",
+                    "enum": ["both", "dna-only"],
+                    "default": "both",
+                    "fa_icon": "fas fa-dna"
                 }
             }
         },

@@ -65,6 +65,67 @@ nextflow_workflow {
             assert lines[0].startsWith('#version')
             assert lines[1].contains('Hugo_Symbol')
             assert lines[1].contains('Tumor_Sample_Barcode')
+
+            // RNA integration ran — RNA columns must be present
+            assert lines[1].contains('t_depth_rna')
+            assert lines[1].contains('Flag_RNA_Expressed')
+        }
+    }
+
+    test("One subject — type=dna-only skips RNA integration even when an RNA VCF is supplied") {
+
+        when {
+            params {
+                outdir    = "$outputDir"
+                type      = 'dna-only'
+                vep_data  = ""
+                pcgr_data = ""
+            }
+            workflow {
+                """
+                input[0] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1', pipeline: 'mutation_germline'],
+                        file('${projectDir}/assets/test_data/oncoanalyser_output/TEST/T1/pave/T1-T.pave.germline.vcf.gz')
+                    ]
+                )
+                input[1] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1', pipeline: 'mutation'],
+                        file('${projectDir}/assets/test_data/oncoanalyser_output/TEST/T1/pave/T1-T.pave.somatic.vcf.gz')
+                    ]
+                )
+                // RNA-append VCF is supplied on purpose — dna-only mode must ignore it
+                input[2] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1', pipeline: 'mutation_rna'],
+                        file('${projectDir}/assets/test_data/oncoanalyser_output/TEST/T1/sage_append/somatic/T1-T.sage.append.vcf.gz')
+                    ]
+                )
+                input[3] = file('${projectDir}/assets/test_data/reference/Homo_sapiens_assembly38_chr21.fasta')
+                input[4] = Channel.empty()
+                input[5] = Channel.empty()
+                input[6] = true
+                input[7] = true
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.out.out.size() == 1
+
+            def maf_path = workflow.out.out.collect { meta, f -> f }[0].toString()
+            assert maf_path.endsWith('.maf')
+
+            def lines = path(maf_path).readLines()
+            assert lines[0].startsWith('#version')
+            assert lines[1].contains('Hugo_Symbol')
+            assert lines[1].contains('Tumor_Sample_Barcode')
+
+            // No RNA integration — RNA-only columns must be absent
+            assert !lines[1].contains('t_depth_rna')
+            assert !lines[1].contains('Flag_RNA_Expressed')
         }
     }
 }

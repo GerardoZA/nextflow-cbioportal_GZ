@@ -57,14 +57,21 @@ workflow GENOMIC_MUTATIONS {
             return tuple(meta, maf)
         }
 
-        // join RNA-append VCF with somatic DNA MAF on subject
-        som_rna_dna_tuple = som_rna_vcf
-            .map { meta, file -> tuple(meta.subject, meta, file) }
-            .join(
-                som_dna_maf.map { meta, file -> tuple(meta.subject, meta, file) }
-            )
+        // dna-only mode: no RNA VCF exists for any subject, so skip the RNA integration
+        // join entirely and pass the DNA MAF straight through (an inner join against an
+        // always-empty RNA channel would otherwise silently drop every subject's mutations)
+        if (params.type == 'dna-only') {
+            som_dna_rna_maf = som_dna_maf
+        } else {
+            // join RNA-append VCF with somatic DNA MAF on subject
+            som_rna_dna_tuple = som_rna_vcf
+                .map { meta, file -> tuple(meta.subject, meta, file) }
+                .join(
+                    som_dna_maf.map { meta, file -> tuple(meta.subject, meta, file) }
+                )
 
-        som_dna_rna_maf = INTEGRATE_RNA_VARIANTS(som_rna_dna_tuple)
+            som_dna_rna_maf = INTEGRATE_RNA_VARIANTS(som_rna_dna_tuple)
+        }
 
         som_dna_maf_tsv = som_dna_rna_maf
             .map { meta, file -> return tuple(meta.subject, meta, file) }
