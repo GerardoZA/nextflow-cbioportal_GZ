@@ -194,21 +194,31 @@ workflow GENOMIC {
         //   isofox/${sample_id}-T.isf.gene_data.csv
 
         // SAGE somatic VCF → mutations
+        // dna-only: oncoanalyser never runs PAVE/sage_append without RNA, so the somatic
+        // VCF is the raw SAGE output (sage/somatic/) rather than the PAVE-annotated one
         ch_sage_vcf = ch_samples_to_run
             .map { meta ->
-                def vcf = findOncoFile(meta,
-                    "${meta.folder}/pave/${meta.subject}-T.pave.somatic.vcf.gz",
-                    'mutation (PAVE somatic)')
+                def vcf = params.type == 'dna-only'
+                    ? findOncoFile(meta,
+                        "${meta.folder}/sage/somatic/${meta.subject}-T.sage.somatic.vcf.gz",
+                        'mutation (SAGE somatic, dna-only)')
+                    : findOncoFile(meta,
+                        "${meta.folder}/pave/${meta.subject}-T.pave.somatic.vcf.gz",
+                        'mutation (PAVE somatic)')
                 vcf ? [meta + [pipeline: 'mutation'], vcf] : null
             }
             .filter { it != null }
 
-        // SAGE germline VCF → germline mutations
+        // SAGE germline VCF → germline mutations (same dna-only caveat as above)
         ch_sage_germline_vcf = ch_samples_to_run
             .map { meta ->
-                def vcf = findOncoFile(meta,
-                    "${meta.folder}/pave/${meta.subject}-T.pave.germline.vcf.gz",
-                    'germline mutation (PAVE)')
+                def vcf = params.type == 'dna-only'
+                    ? findOncoFile(meta,
+                        "${meta.folder}/sage/germline/${meta.subject}-T.sage.germline.vcf.gz",
+                        'germline mutation (SAGE, dna-only)')
+                    : findOncoFile(meta,
+                        "${meta.folder}/pave/${meta.subject}-T.pave.germline.vcf.gz",
+                        'germline mutation (PAVE)')
                 vcf ? [meta + [pipeline: 'mutation_germline'], vcf] : null
             }
             .filter { it != null }
@@ -282,22 +292,30 @@ workflow GENOMIC {
             }
             .filter { it != null }
 
-        // DBS signature fitting: extract from PAVE somatic VCF
+        // DBS signature fitting: extract from PAVE somatic VCF (raw SAGE somatic in dna-only)
         ch_sigs_dbs = ch_samples_to_run
             .map { meta ->
-                def f = findOncoFile(meta,
-                    "${meta.folder}/pave/${meta.subject}-T.pave.somatic.vcf.gz",
-                    'somatic VCF (SigProfiler DBS)')
+                def f = params.type == 'dna-only'
+                    ? findOncoFile(meta,
+                        "${meta.folder}/sage/somatic/${meta.subject}-T.sage.somatic.vcf.gz",
+                        'somatic VCF (SigProfiler DBS, dna-only)')
+                    : findOncoFile(meta,
+                        "${meta.folder}/pave/${meta.subject}-T.pave.somatic.vcf.gz",
+                        'somatic VCF (SigProfiler DBS)')
                 f ? [meta + [pipeline: 'sigs_dbs'], f] : null
             }
             .filter { it != null }
 
-        // ID signature fitting: extract indels from PAVE somatic VCF
+        // ID signature fitting: extract indels from PAVE somatic VCF (raw SAGE somatic in dna-only)
         ch_sigs_id = ch_samples_to_run
             .map { meta ->
-                def f = findOncoFile(meta,
-                    "${meta.folder}/pave/${meta.subject}-T.pave.somatic.vcf.gz",
-                    'somatic VCF (SigProfiler ID)')
+                def f = params.type == 'dna-only'
+                    ? findOncoFile(meta,
+                        "${meta.folder}/sage/somatic/${meta.subject}-T.sage.somatic.vcf.gz",
+                        'somatic VCF (SigProfiler ID, dna-only)')
+                    : findOncoFile(meta,
+                        "${meta.folder}/pave/${meta.subject}-T.pave.somatic.vcf.gz",
+                        'somatic VCF (SigProfiler ID)')
                 f ? [meta + [pipeline: 'sigs_id'], f] : null
             }
             .filter { it != null }

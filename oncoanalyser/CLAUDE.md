@@ -4,7 +4,8 @@ Oncoanalyser WGS/WTS + clinical CSVs → cBioPortal. HPC-only (SLURM + Apptainer
 
 ## Key Rules
 
-- `--type both` (default) or `--type dna-only` — dna-only skips all RNA-derived processing (Isofox expression, Isofox fusion, SAGE RNA-append integration into mutations) and omits the expression profile/meta file, even if RNA files exist on disk. Validated in `subworkflows/local/utils/main.nf`. Mutational signature fitting (Sigs) is unaffected either way — it's DNA-only already (PAVE somatic VCF).
+- `--type both` (default) or `--type dna-only` — dna-only skips all RNA-derived processing (Isofox expression, Isofox fusion, SAGE RNA-append integration into mutations) and omits the expression profile/meta file, even if RNA files exist on disk. Validated in `subworkflows/local/utils/main.nf`. Mutational signature fitting (Sigs) is unaffected either way — it's DNA-only already, but the VCF it reads changes (see below).
+- `--type dna-only` also changes the somatic/germline VCF source: oncoanalyser only runs PAVE (annotation) and `sage_append` (RNA-count append) when RNA is present, so dna-only reads the raw SAGE output — `sage/somatic/<subject>-T.sage.somatic.vcf.gz` and `sage/germline/<subject>-T.sage.germline.vcf.gz` — instead of `pave/<subject>-T.pave.somatic.vcf.gz` / `pave/<subject>-T.pave.germline.vcf.gz`. Applies everywhere a somatic VCF is read: mutations (`ch_sage_vcf`), DBS/ID signature fitting (`ch_sigs_dbs`, `ch_sigs_id`) in `workflows/genomic.nf`.
 - R scripts → `container_r`; Python → `container_python`; SigProfiler → `container_sigprofiler`
 - `data_sv.txt` rows require Hugo symbols at both sites — filter unannotated rows
 - SV classification (`gen_esvee_sv_to_cbioportal.R`): BND ALT strand → `(+,-)` DEL, `(-,+)` DUP, `(+,+)/(−,−)` INV, diff chr TRANSLOC. DNA SVs: `DNA_Support=Yes, RNA_Support=No`
