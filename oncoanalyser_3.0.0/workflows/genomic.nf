@@ -32,6 +32,22 @@ def findOncoFile(meta, path_str, label) {
 }
 
 
+// Somatic or germline (kind) variant VCF for a subject. "both" reads PAVE. dna-only prefers
+// PAVE too, and falls back to the raw SAGE VCF only when oncoanalyser wrote no PAVE file for
+// the subject (it can skip PAVE/sage_append without RNA). Raw SAGE carries no PAVE INFO, so
+// gnomAD_AF and the HMF.* MAF columns stay empty for a subject read from it.
+def findVariantVcf(meta, kind, label) {
+    def pave = "${meta.folder}/pave/${kind}/${meta.subject}-T.pave.${kind}.vcf.gz"
+    def pave_f = file(pave, checkIfExists: false)
+    if (params.type != 'dna-only' || (pave_f.exists() && !pave_f.isEmpty())) {
+        return findOncoFile(meta, pave, "${label} (PAVE ${kind})")
+    }
+    return findOncoFile(meta,
+        "${meta.folder}/sage/${kind}/${meta.subject}-T.sage.${kind}.vcf.gz",
+        "${label} (SAGE ${kind}, dna-only fallback)")
+}
+
+
 // Every per-subject file this workflow publishes to <outdir>/<group>/<subject>/.
 //
 // SINGLE SOURCE OF TRUTH: both the "is this subject already done" gate and the
@@ -225,22 +241,18 @@ workflow GENOMIC {
         //   isofox/${subject}-T.isf.pass_fusions.tsv
         //   sigs/${subject}-T.sig.snv_counts.csv
 
-        // PAVE somatic VCF → mutations
+        // PAVE somatic VCF → mutations (dna-only: raw SAGE when pave/ is absent, see findVariantVcf)
         ch_sage_vcf = ch_samples_to_run
             .map { meta ->
-                def vcf = findOncoFile(meta,
-                    "${meta.folder}/pave/somatic/${meta.subject}-T.pave.somatic.vcf.gz",
-                    'mutation (PAVE somatic)')
+                def vcf = findVariantVcf(meta, 'somatic', 'mutation')
                 vcf ? [meta + [pipeline: 'mutation'], vcf] : null
             }
             .filter { it != null }
 
-        // SAGE germline VCF → germline mutations
+        // PAVE germline VCF → germline mutations (same dna-only fallback as above)
         ch_sage_germline_vcf = ch_samples_to_run
             .map { meta ->
-                def vcf = findOncoFile(meta,
-                    "${meta.folder}/pave/germline/${meta.subject}-T.pave.germline.vcf.gz",
-                    'germline mutation (PAVE)')
+                def vcf = findVariantVcf(meta, 'germline', 'germline mutation')
                 vcf ? [meta + [pipeline: 'mutation_germline'], vcf] : null
             }
             .filter { it != null }
@@ -322,22 +334,18 @@ workflow GENOMIC {
             }
             .filter { it != null }
 
-        // DBS signature fitting: extract from PAVE somatic VCF
+        // DBS signature fitting: extract from PAVE somatic VCF (dna-only: raw SAGE fallback)
         ch_sigs_dbs = ch_samples_to_run
             .map { meta ->
-                def f = findOncoFile(meta,
-                    "${meta.folder}/pave/somatic/${meta.subject}-T.pave.somatic.vcf.gz",
-                    'somatic VCF (SigProfiler DBS)')
+                def f = findVariantVcf(meta, 'somatic', 'SigProfiler DBS')
                 f ? [meta + [pipeline: 'sigs_dbs'], f] : null
             }
             .filter { it != null }
 
-        // ID signature fitting: extract indels from PAVE somatic VCF
+        // ID signature fitting: extract indels from PAVE somatic VCF (dna-only: raw SAGE fallback)
         ch_sigs_id = ch_samples_to_run
             .map { meta ->
-                def f = findOncoFile(meta,
-                    "${meta.folder}/pave/somatic/${meta.subject}-T.pave.somatic.vcf.gz",
-                    'somatic VCF (SigProfiler ID)')
+                def f = findVariantVcf(meta, 'somatic', 'SigProfiler ID')
                 f ? [meta + [pipeline: 'sigs_id'], f] : null
             }
             .filter { it != null }

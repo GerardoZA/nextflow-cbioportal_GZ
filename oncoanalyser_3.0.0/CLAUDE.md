@@ -13,7 +13,15 @@ Requires Nextflow >= 26.04.4.
   file, even if RNA files exist on disk. `workflows/genomic.nf` hands those channels
   `channel.empty()`, so every subject reaches `INTEGRATE_RNA_VARIANTS` with `[]` and its MAF
   keeps the empty `RNA.*` columns. Validated in `subworkflows/local/utils/main.nf`.
-  Mutational signature fitting (Sigs) is DNA-only either way
+  Mutational signature fitting (Sigs) is DNA-only either way, but its VCF may differ (below)
+- `--type dna-only` falls back per subject for the somatic/germline VCF: `findVariantVcf()` in
+  `workflows/genomic.nf` reads `pave/{somatic,germline}/<subject>-T.pave.*.vcf.gz` when it
+  exists (as in "both" mode), and only otherwise the raw SAGE output,
+  `sage/{somatic,germline}/<subject>-T.sage.*.vcf.gz`. A DNA-only oncoanalyser run may or may
+  not write `pave/` — never assume either. Applies to mutations (`ch_sage_vcf`,
+  `ch_sage_germline_vcf`) and DBS/ID signature fitting (`ch_sigs_dbs`, `ch_sigs_id`). Raw SAGE
+  carries no PAVE INFO, so `gnomAD_AF` and the `HMF.*` MAF columns stay empty for a fallback
+  subject; a cohort can mix both sources, since the MAF columns are written unconditionally
 - R scripts → `container_r`; Python → `container_python`; SigProfiler → `container_sigprofiler`;
   VCF→MAF → `container_mafsmith`
 - **VCF→MAF is `MAFSMITH` (nf-osi/mafsmith), not vcf2maf** (since 4.0.0).
