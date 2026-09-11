@@ -142,6 +142,8 @@ Exon, Intron}`. Isofox records a transcript + exon rank only when the breakend f
   and its VEP cache together. PCGR 2.3.x needs VEP 115, so it is out while we stay on VEP 113.
   The `test` profile stays on PCGR 2.1.2 to match its downloads
 - No internet on compute nodes — `NXF_OFFLINE=true`; pre-pull containers on login nodes
+- Keep `executor.queueSize` well under the cluster's per-account `MaxSubmitJobs` (1000 on
+  Narval/Rorqual) or large cohorts die on `AssocMaxSubmitJobLimit`
 - Reference data comes from the resource kit (`--resources_dir`); see Configuration Layout
 - Nextflow optional outputs: `optional: true` is an option on the whole output
   declaration, NOT an argument to `path()`. `tuple val(x), path("f.txt"), emit: y,
