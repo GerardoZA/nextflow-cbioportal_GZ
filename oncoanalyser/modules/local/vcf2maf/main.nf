@@ -24,7 +24,17 @@ process VCF2MAF {
 
     """
     if [ "$vep_data" ]; then
-        VEP_CMD="--vep-path \$(dirname \$(type -p vep))"
+        # `type -p` is non-fatal here so a missing VEP produces a readable error below
+        # rather than `dirname: missing operand` from an empty command substitution.
+        VEP_BIN=\$(type -p vep || true)
+        if [ -z "\$VEP_BIN" ]; then
+            echo "ERROR: vep_data is set but no 'vep' executable was found on PATH inside the container." >&2
+            echo "       container_vcf2maf = ${params.container_vcf2maf}" >&2
+            echo "       vcf2maf.pl requires ensembl-vep. Point params.container_vcf2maf at an image" >&2
+            echo "       that bundles VEP (e.g. vcf2maf_ensembl-vep), or unset params.vep_data." >&2
+            exit 1
+        fi
+        VEP_CMD="--vep-path \$(dirname \$VEP_BIN)"
         VEP_VERSION=\$(echo -e "\\n    ensemblvep: \$( echo \$(vep --help 2>&1) | sed 's/^.*Versions:.*ensembl-vep : //;s/ .*\$//')")
     else
         VEP_CMD=""

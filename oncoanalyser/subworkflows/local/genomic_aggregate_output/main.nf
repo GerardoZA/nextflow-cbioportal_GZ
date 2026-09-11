@@ -8,6 +8,12 @@ include { MERGE_SIGS_COUNTS_DBS_TO_CBIOPORTAL } from '../../../modules/local/mer
 include { MERGE_SIGS_ID_TO_CBIOPORTAL } from '../../../modules/local/merge_sigs_id_to_cbioportal'
 include { MERGE_SIGS_COUNTS_ID_TO_CBIOPORTAL } from '../../../modules/local/merge_sigs_counts_id_to_cbioportal'
 
+// Case-insensitive: params values set on the command line are immutable, so "--type DNA-only"
+// reaches here unnormalised and an exact-match comparison would silently be false.
+def isDnaOnly() {
+    return (params.type ?: 'both').toString().toLowerCase() == 'dna-only'
+}
+
     workflow GENOMIC_AGGREGATE_OUTPUT {
 
         take:
@@ -369,7 +375,7 @@ generic_entity_meta_properties: NAME
             ["cna_long", meta_text_long],
             ["sv", meta_text_sv],
         ]
-        if (params.type != 'dna-only') {
+        if (!isDnaOnly()) {
             meta_entries << ["expression", meta_text_expression]
         }
         meta_entries += [

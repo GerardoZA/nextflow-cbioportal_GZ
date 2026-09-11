@@ -176,11 +176,11 @@ def validateInputParameters() {
     }
 
     // check sequencing data type
-    if (!params.type) {
-        params.type = "both"
-    }
-    params.type = params.type.toLowerCase()
-    if ( !(params.type in ['both', 'dna-only']) ) {
+    // NOTE: params values supplied on the command line are immutable — assigning to
+    // params.type here is silently ignored, so the value is NOT normalised in place.
+    // Every consumer must compare case-insensitively (see isDnaOnly() in the workflows).
+    def type_value = (params.type ?: 'both').toString().toLowerCase()
+    if ( !(type_value in ['both', 'dna-only']) ) {
         error("ERROR: Invalid --type value '${params.type}'. Choices: 'both' or 'dna-only'")
     }
 

@@ -21,6 +21,13 @@ include { SIGS_COUNTS_TO_CBIOPORTAL    } from '../modules/local/sigs_counts_to_c
 include { PACKAGE_CBIOPORTAL           } from '../modules/local/package_cbioportal'
 
 
+// True when running without RNA data. Compares case-insensitively because params values
+// given on the command line are immutable — "--type DNA-only" cannot be normalised in
+// place by the validator, so a plain `params.type == 'dna-only'` would silently be false.
+def isDnaOnly() {
+    return (params.type ?: 'both').toString().toLowerCase() == 'dna-only'
+}
+
 // Resolve an oncoanalyser output file path; log a warning and return null if absent.
 def findOncoFile(meta, path_str, label) {
     def f = file(path_str, checkIfExists: false)
@@ -198,7 +205,7 @@ workflow GENOMIC {
         // VCF is the raw SAGE output (sage/somatic/) rather than the PAVE-annotated one
         ch_sage_vcf = ch_samples_to_run
             .map { meta ->
-                def vcf = params.type == 'dna-only'
+                def vcf = isDnaOnly()
                     ? findOncoFile(meta,
                         "${meta.folder}/sage/somatic/${meta.subject}-T.sage.somatic.vcf.gz",
                         'mutation (SAGE somatic, dna-only)')
@@ -212,7 +219,7 @@ workflow GENOMIC {
         // SAGE germline VCF → germline mutations (same dna-only caveat as above)
         ch_sage_germline_vcf = ch_samples_to_run
             .map { meta ->
-                def vcf = params.type == 'dna-only'
+                def vcf = isDnaOnly()
                     ? findOncoFile(meta,
                         "${meta.folder}/sage/germline/${meta.subject}-T.sage.germline.vcf.gz",
                         'germline mutation (SAGE, dna-only)')
@@ -224,7 +231,7 @@ workflow GENOMIC {
             .filter { it != null }
 
         // SAGE RNA-append VCF → somatic RNA mutations (skipped entirely in dna-only mode)
-        ch_sage_rna_vcf = params.type == 'dna-only'
+        ch_sage_rna_vcf = isDnaOnly()
             ? Channel.empty()
             : ch_samples_to_run
                 .map { meta ->
@@ -259,7 +266,7 @@ workflow GENOMIC {
             .filter { it != null }
 
         // Isofox gene expression CSV → TPM (skipped entirely in dna-only mode)
-        ch_isofox_exp = params.type == 'dna-only'
+        ch_isofox_exp = isDnaOnly()
             ? Channel.empty()
             : ch_samples_to_run
                 .map { meta ->
@@ -271,7 +278,7 @@ workflow GENOMIC {
                 .filter { it != null }
 
         // Isofox pass_fusions CSV (tumor RNA) → RNA fusions for data_sv.txt (skipped entirely in dna-only mode)
-        ch_isofox_fusion = params.type == 'dna-only'
+        ch_isofox_fusion = isDnaOnly()
             ? Channel.empty()
             : ch_samples_to_run
                 .map { meta ->
@@ -295,7 +302,7 @@ workflow GENOMIC {
         // DBS signature fitting: extract from PAVE somatic VCF (raw SAGE somatic in dna-only)
         ch_sigs_dbs = ch_samples_to_run
             .map { meta ->
-                def f = params.type == 'dna-only'
+                def f = isDnaOnly()
                     ? findOncoFile(meta,
                         "${meta.folder}/sage/somatic/${meta.subject}-T.sage.somatic.vcf.gz",
                         'somatic VCF (SigProfiler DBS, dna-only)')
@@ -309,7 +316,7 @@ workflow GENOMIC {
         // ID signature fitting: extract indels from PAVE somatic VCF (raw SAGE somatic in dna-only)
         ch_sigs_id = ch_samples_to_run
             .map { meta ->
-                def f = params.type == 'dna-only'
+                def f = isDnaOnly()
                     ? findOncoFile(meta,
                         "${meta.folder}/sage/somatic/${meta.subject}-T.sage.somatic.vcf.gz",
                         'somatic VCF (SigProfiler ID, dna-only)')

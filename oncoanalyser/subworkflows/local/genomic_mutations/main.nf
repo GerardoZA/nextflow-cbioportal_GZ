@@ -7,6 +7,12 @@ include { DOWNLOAD_PCGR        } from '../../../modules/local/download_pcgr'
 include { BCFTOOLS_INDEX       } from '../../../modules/nf-core/bcftools/index'
 include { FILTER_GERMLINE_DNA  } from '../../../modules/local/filter_germline_dna'
 
+// Case-insensitive: params values set on the command line are immutable, so "--type DNA-only"
+// reaches here unnormalised and an exact-match comparison would silently be false.
+def isDnaOnly() {
+    return (params.type ?: 'both').toString().toLowerCase() == 'dna-only'
+}
+
 workflow GENOMIC_MUTATIONS {
     take:
         ger_dna_vcf // tuple (meta, pave.germline.vcf.gz) — pave germline VCF
@@ -60,7 +66,7 @@ workflow GENOMIC_MUTATIONS {
         // dna-only mode: no RNA VCF exists for any subject, so skip the RNA integration
         // join entirely and pass the DNA MAF straight through (an inner join against an
         // always-empty RNA channel would otherwise silently drop every subject's mutations)
-        if (params.type == 'dna-only') {
+        if (isDnaOnly()) {
             som_dna_rna_maf = som_dna_maf
         } else {
             // join RNA-append VCF with somatic DNA MAF on subject
