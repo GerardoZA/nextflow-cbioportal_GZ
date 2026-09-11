@@ -12,6 +12,8 @@ Oncoanalyser WGS/WTS + clinical CSVs → cBioPortal. HPC-only (SLURM + Apptainer
 - RNA fusions (`gen_isofox_fusion_to_cbioportal.R`): `Class=FUSION, DNA_Support=No, RNA_Support=Yes`. Both merge into `data_sv.txt`
 - `ml_format_cnv.R` / `ml_format_expression.R` check `basename(input)` — inputs must be named `data_cna_long.txt` / `data_expression.txt`
 - No internet on compute nodes — `NXF_OFFLINE=true`; pre-pull containers on login nodes
+- `container_vcf2maf` must bundle **both** `vcf2maf.pl` and `vep` (e.g. `vcf2maf_ensembl-vep`) whenever `vep_data` is set — a vcf2maf-only image makes VCF2MAF fail
+- Keep `executor.queueSize` well under the cluster's per-account `MaxSubmitJobs` (1000 on Narval/Rorqual) or large cohorts die on `AssocMaxSubmitJobLimit`
 - VEP/PCGR data must be pre-staged
 
 ## Timeline Generation (`gen_timeline.R`)
