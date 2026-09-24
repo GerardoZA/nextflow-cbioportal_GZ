@@ -47,7 +47,7 @@ Params: `mohccn_primary_site_map`, `mohccn_specimen_tissue_source_map`, `mohccn_
 
 ## Incremental Processing
 
-The genomic workflow checks for pre-existing output files per subject. If all expected outputs (CNV, SV, expression, mutations) already exist, processing is skipped. This allows adding new subjects to the samplesheet and re-running without reprocessing the entire cohort. Delete a subject's output directory to force reprocessing.
+The genomic workflow checks for pre-existing output files per subject. If all expected outputs (CNV, SV, expression, mutations) already exist, processing is skipped. Both the skip decision and the reuse of cached files go through `isSubjectComplete()` in `workflows/genomic.nf` — a subject that is re-run must never also be read from cache, or every file reaches the merge steps twice. In `--type dna-only` no `tpm.tsv` is produced, so every subject is re-run (rely on `-resume`). This allows adding new subjects to the samplesheet and re-running without reprocessing the entire cohort. Delete a subject's output directory to force reprocessing.
 
 ## Process Labels (`conf/base.config`)
 

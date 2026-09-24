@@ -38,6 +38,20 @@ def findOncoFile(meta, path_str, label) {
     return f
 }
 
+// Subject is complete (and skipped) only if all expected per-subject outputs exist.
+// Cached files must only be reused for skipped subjects — a subject that is re-run and
+// also read from cache reaches the merge steps twice (name collision / duplicated rows).
+def isSubjectComplete(meta) {
+    def baseDir = file("${params.outdir}/${meta.group}/${meta.subject}")
+    if (!baseDir.exists() || !baseDir.isDirectory()) return false
+    return [
+        "${meta.sample}_data_cna_hg38.seg",
+        "${meta.sample}_data_cna_long.txt",
+        "${meta.sample}.data_sv.txt",
+        "${meta.sample}.tpm.tsv",
+        "${meta.sample}.somatic_rna_germline.maf",
+    ].every { name -> file("${baseDir}/${name}", checkIfExists: false).exists() }
+}
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -82,10 +96,7 @@ workflow GENOMIC {
         // If all expected outputs exist, skip processing and reuse cached files.
 
         ch_files_ran = ch_samples
-            .filter { meta ->
-                def baseDir = file("${params.outdir}/${meta.group}/${meta.subject}")
-                baseDir.exists() && baseDir.isDirectory()
-            }
+            .filter { meta -> isSubjectComplete(meta) }
             .flatMap { meta ->
                 def baseDir = file("${params.outdir}/${meta.group}/${meta.subject}")
                 def files = []
@@ -149,18 +160,9 @@ workflow GENOMIC {
                 return files
             }
 
-        // Get set of already-processed subject names (those with all 4 outputs)
+        // Get set of already-processed subject names (those with all expected outputs)
         existing_subjects = ch_samples
-            .filter { meta ->
-                def baseDir = file("${params.outdir}/${meta.group}/${meta.subject}")
-                if (!baseDir.exists()) return false
-                def seg = file("${baseDir}/${meta.sample}_data_cna_hg38.seg", checkIfExists: false)
-                def long_cnv = file("${baseDir}/${meta.sample}_data_cna_long.txt", checkIfExists: false)
-                def sv = file("${baseDir}/${meta.sample}.data_sv.txt", checkIfExists: false)
-                def tpm = file("${baseDir}/${meta.sample}.tpm.tsv", checkIfExists: false)
-                def maf = file("${baseDir}/${meta.sample}.somatic_rna_germline.maf", checkIfExists: false)
-                return seg.exists() && long_cnv.exists() && sv.exists() && tpm.exists() && maf.exists()
-            }
+            .filter { meta -> isSubjectComplete(meta) }
             .map { meta -> meta.subject }
             .collect()
             .map { it.toSet() }
