@@ -40,8 +40,12 @@ workflow GENOMIC_ML {
             mutation_result
         )
 
+        // Pre-staged cancerhotspots.org JSON — compute nodes may have no internet
+        hotspots_json = params.hotspots_data ? file(params.hotspots_data, checkIfExists: true) : []
+
         PROCESS_ML_MUTATION(
-            FORMAT_ML_MUTATION.out
+            FORMAT_ML_MUTATION.out,
+            hotspots_json
         )
 
         if (cosmic_data) {

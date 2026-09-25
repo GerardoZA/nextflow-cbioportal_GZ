@@ -207,6 +207,13 @@ def validateInputParameters() {
             }
         }
 
+        if (params.hotspots_data) {
+            def hotspots_data = file(params.hotspots_data)
+            if (!hotspots_data.exists()) {
+                error("ERROR: Hotspots data file does not exist: ${params.hotspots_data}")
+            }
+        }
+
     }
 
     if (params.mode in ["clinical", "both"] && !params.clinical_samplesheet){

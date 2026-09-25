@@ -5,16 +5,24 @@ library(httr)
 library(jsonlite)
 
 #' Fetch and cache cancer hotspots data
+#' @param hotspots_file Optional path to a pre-downloaded copy of
+#'   https://www.cancerhotspots.org/api/hotspots/single (for offline compute nodes)
 #' @return DataFrame of hotspot mutations
 #' @keywords internal
-fetch_hotspots <- function(){
+fetch_hotspots <- function(hotspots_file = NULL){
 
-  # Fetch data from cancerhotspots.org
-  message("Fetching hotspot data from cancerhotspots.org...")
+  if (!is.null(hotspots_file)) {
+    # Read pre-staged single residue hotspots
+    message("Reading hotspot data from ", hotspots_file, "...")
+    single_hotspots <- fromJSON(hotspots_file, flatten = TRUE)
+  } else {
+    # Fetch data from cancerhotspots.org
+    message("Fetching hotspot data from cancerhotspots.org...")
 
-  # Single residue hotspots
-  response <- GET("https://www.cancerhotspots.org/api/hotspots/single", config=config(ssl_verifypeer = FALSE))
-  single_hotspots <- fromJSON(rawToChar(response$content), flatten = TRUE)
+    # Single residue hotspots
+    response <- GET("https://www.cancerhotspots.org/api/hotspots/single", config=config(ssl_verifypeer = FALSE))
+    single_hotspots <- fromJSON(rawToChar(response$content), flatten = TRUE)
+  }
 
   # Process single hotspots data
   hotspots <- single_hotspots %>%
@@ -72,12 +80,13 @@ get_mutation_weight <- function(effect) {
 #' Process mutation data for deep learning input
 #' @param input_file Path to mutation result data
 #' @param min_freq Minimum mutation frequency across samples to include gene (default: 0.01)
+#' @param hotspots_file Optional path to pre-downloaded hotspot JSON (NULL = fetch from API)
 #' @return DataFrame containing hybrid mutation encoding
 #' @export
-process_mutation_data <- function(input_file, min_freq = 0.01) {
+process_mutation_data <- function(input_file, min_freq = 0.01, hotspots_file = NULL) {
 
   # Fetch hotspot data
-  hotspots <- fetch_hotspots()
+  hotspots <- fetch_hotspots(hotspots_file)
 
   # Read mutation data
   mutations <- read_tsv(input_file, show_col_types = FALSE)
@@ -343,14 +352,19 @@ validate_mutation_data <- function(mutation_data) {
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) == 0){
-  stop("Usage: Rscript ml_mutation_processor.R <path to mutation result data>")
+  stop("Usage: Rscript ml_mutation_processor.R <path to mutation result data> [path to hotspots JSON]")
 }
 
 input_file <- args[1]
+hotspots_file <- if (length(args) >= 2) args[2] else NULL
 
 if (!file.exists(input_file)) {
   stop("Error : Input file does not exist: ", input_file)
 }
 
+if (!is.null(hotspots_file) && !file.exists(hotspots_file)) {
+  stop("Error : Hotspots file does not exist: ", hotspots_file)
+}
+
 # The invisible wrap prevents it from printing the dataframe object back to console
-invisible(process_mutation_data(input_file))
+invisible(process_mutation_data(input_file, hotspots_file = hotspots_file))
