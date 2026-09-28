@@ -15,6 +15,8 @@ Oncoanalyser WGS/WTS + clinical CSVs → cBioPortal. HPC-only (SLURM + Apptainer
 - `container_vcf2maf` must bundle **both** `vcf2maf.pl` and `vep` (e.g. `vcf2maf_ensembl-vep`) whenever `vep_data` is set — a vcf2maf-only image makes VCF2MAF fail
 - Keep `executor.queueSize` well under the cluster's per-account `MaxSubmitJobs` (1000 on Narval/Rorqual) or large cohorts die on `AssocMaxSubmitJobLimit`
 - VEP/PCGR data must be pre-staged
+- SAGE/PAVE germline VCFs carry no genotypes (`GT=./.`), and CPSR's `vcf2tsvpy` step drops `./.` rows (there is no CPSR flag to change this), so CPSR silently classifies nothing. `FILTER_GERMLINE_DNA` therefore sets GT from the normal's `FMT/AF` (`≥0.9` → `1/1`, `>0` → `0/1`) with `bcftools +setGT`, and removes `INFO/IMPACT` (PAVE), which clashes with a CPSR 2.3.1 reserved tag and aborts CPSR
+- `Mutation_Status` in the per-sample MAF: rows from the somatic vcf2maf MAF → `Somatic` (set in `gen_convert_cpsr_to_maf.R` where blank; in both mode the `RNA(d=,v=,filt=)` text from INTEGRATE_RNA_VARIANTS is kept), rows from CPSR → `Germline`. Germline has priority: a somatic row that is the same variant as a CPSR call (chrom ignoring `chr`, Start_Position, Reference_Allele, Tumor_Seq_Allele2) is dropped, so only the CPSR row remains. CPSR rows get the `chr` prefix like vcf2maf rows. Never leave it blank: `ml_format_mutation.R` splits on it, and dplyr `filter()` drops NA
 
 ## Timeline Generation (`gen_timeline.R`)
 

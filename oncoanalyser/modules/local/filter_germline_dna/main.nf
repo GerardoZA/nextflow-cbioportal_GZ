@@ -17,10 +17,15 @@ process FILTER_GERMLINE_DNA {
     zcat $ger_dna_vcf | grep "#" > tmp.${meta.sample}.vcf
     zgrep -v "^#" $ger_dna_vcf | grep PASS >> tmp.${meta.sample}.vcf
 
+    # SAGE/PAVE germline VCFs leave GT as ./. — CPSR's vcf2tsvpy step drops ./. genotypes, so
+    # every variant would be lost before classification. Call GT from the normal's FORMAT/AF
+    # (existing genotypes are untouched). INFO/IMPACT (PAVE) clashes with a CPSR tag and aborts CPSR.
     bcftools view \\
         -s ^${meta.sample} \\
-        -Oz \\
-        -o ${meta.sample}.vcf.gz \\
-        tmp.${meta.sample}.vcf
+        -Ou \\
+        tmp.${meta.sample}.vcf \\
+    | bcftools annotate -x INFO/IMPACT -Ou \\
+    | bcftools +setGT -Ou -- -t q -n c:1/1 -i 'GT="mis" && FMT/AF>=0.9' \\
+    | bcftools +setGT -Oz -o ${meta.sample}.vcf.gz -- -t q -n c:0/1 -i 'GT="mis" && FMT/AF>0'
     """
 }

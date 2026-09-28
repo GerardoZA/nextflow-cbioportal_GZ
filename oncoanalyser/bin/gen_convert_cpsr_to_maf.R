@@ -34,6 +34,29 @@ convert_cpsr_to_maf <- function(cpsr_file, maf_file, output_file) {
     maf_columns <- strsplit(header_line, "\t")[[1]]
   }
 
+  # Data rows of the somatic MAF (empty if the MAF has a header only)
+  somatic_lines <- if (length(maf_lines) >= data_start) maf_lines[data_start:length(maf_lines)] else character(0)
+
+  # vcf2maf leaves Mutation_Status blank: label the somatic MAF rows "Somatic" (CPSR rows below
+  # are "Germline"). Non-blank values (e.g. RNA info from INTEGRATE_RNA_VARIANTS) are kept.
+  split_maf_line <- function(line) {
+    fields <- strsplit(line, "\t", fixed = TRUE)[[1]]
+    # strsplit drops trailing empty fields
+    if (length(fields) < length(maf_columns)) {
+      fields <- c(fields, rep("", length(maf_columns) - length(fields)))
+    }
+    fields
+  }
+
+  status_idx <- match("Mutation_Status", maf_columns)
+  if (!is.na(status_idx)) {
+    somatic_lines <- vapply(somatic_lines, function(line) {
+      fields <- split_maf_line(line)
+      if (fields[status_idx] == "") fields[status_idx] <- "Somatic"
+      paste(fields, collapse = "\t")
+    }, character(1), USE.NAMES = FALSE)
+  }
+
   # Read the MAF data to extract sample barcodes
   maf_data <- read.delim(maf_file, comment.char="#", stringsAsFactors=FALSE)
 
@@ -51,26 +74,13 @@ convert_cpsr_to_maf <- function(cpsr_file, maf_file, output_file) {
   if (nrow(cpsr_data) == 0) {
     cat("WARNING: CPSR file contains only headers with no data rows. Creating empty output file.\n")
 
-    # Read existing MAF to preserve structure
-    maf_data <- read.delim(maf_file, comment.char="#", stringsAsFactors=FALSE)
-    maf_lines <- readLines(maf_file)
-
-    # Determine header structure
-    if (starts_with(maf_lines[1], "#version")) {
-      header_line <- maf_lines[2]
-      data_start <- 3
-    } else {
-      header_line <- maf_lines[1]
-      data_start <- 2
-    }
-
     # Write output with existing MAF data only
     output_con <- file(output_file, "w")
     if (starts_with(maf_lines[1], "#version")) {
       writeLines(maf_lines[1], output_con)
     }
     writeLines(header_line, output_con)
-    writeLines(maf_lines[data_start:length(maf_lines)], output_con)
+    writeLines(somatic_lines, output_con)
     close(output_con)
 
     cat("Output file created with existing MAF data only.\n")
@@ -136,9 +146,9 @@ convert_cpsr_to_maf <- function(cpsr_file, maf_file, output_file) {
     maf_entry$Entrez_Gene_Id <- if(!is.null(entrez_col)) cpsr_entry[[entrez_col]] else ""
     maf_entry$Center <- "."
     maf_entry$NCBI_Build <- "GRCh38"
-    maf_entry$Chromosome <- chrom  # Remove "chr" prefix if CPSR already includes it
+    maf_entry$Chromosome <- chrom  # CPSR VAR_ID has no "chr" prefix; add it to match the vcf2maf rows
     if (!grepl("^chr", maf_entry$Chromosome)) {
-      maf_entry$Chromosome <- paste0(maf_entry$Chromosome)
+      maf_entry$Chromosome <- paste0("chr", maf_entry$Chromosome)
     }
     maf_entry$Strand <- "+"
 
@@ -301,6 +311,25 @@ convert_cpsr_to_maf <- function(cpsr_file, maf_file, output_file) {
     maf_entries <- rbind(maf_entries, as.data.frame(as.list(maf_entry), stringsAsFactors=FALSE))
   }
 
+  # Germline takes priority: a somatic MAF row that is the same variant as a CPSR germline call
+  # is dropped, so only the CPSR (Germline) row remains. Matched on MAF-style coordinates
+  # (chr prefix ignored in case either source lacks it).
+  variant_key <- function(chrom, start, ref, alt) {
+    paste(sub("^chr", "", chrom), start, ref, alt, sep = "_")
+  }
+  germline_keys <- variant_key(maf_entries$Chromosome, maf_entries$Start_Position,
+                               maf_entries$Reference_Allele, maf_entries$Tumor_Seq_Allele2)
+  key_idx <- match(c("Chromosome", "Start_Position", "Reference_Allele", "Tumor_Seq_Allele2"), maf_columns)
+
+  if (!anyNA(key_idx) && length(somatic_lines) > 0) {
+    is_germline <- vapply(somatic_lines, function(line) {
+      fields <- split_maf_line(line)
+      variant_key(fields[key_idx[1]], fields[key_idx[2]], fields[key_idx[3]], fields[key_idx[4]]) %in% germline_keys
+    }, logical(1), USE.NAMES = FALSE)
+    somatic_lines <- somatic_lines[!is_germline]
+    cat("Dropped", sum(is_germline), "somatic MAF rows that are the same variant as a CPSR germline call\n")
+  }
+
   # Prepare to write the output
   # First, determine if there's a version line to preserve
   has_version <- FALSE
@@ -328,8 +357,7 @@ convert_cpsr_to_maf <- function(cpsr_file, maf_file, output_file) {
   writeLines(header_to_write, output_con)
 
   # Write existing MAF data (skipping header)
-  maf_data_lines <- maf_lines[data_start:length(maf_lines)]
-  writeLines(maf_data_lines, output_con)
+  writeLines(somatic_lines, output_con)
 
   # Write new entries
   write.table(maf_entries, output_con, sep="\t", quote=FALSE,
