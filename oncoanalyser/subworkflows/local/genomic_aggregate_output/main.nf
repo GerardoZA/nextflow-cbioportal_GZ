@@ -34,7 +34,10 @@ def isDnaOnly() {
             ch_versions = channel.empty()
 
             // to get all groups, just take .seg files (we assume seg and long are the same)
-            all_groups = cnv_results_seg.map {meta, sample -> meta.group}.unique()
+            // dna-only: purple/ may be absent, so take groups from any DNA data type
+            all_groups = isDnaOnly()
+                ? cnv_results_seg.mix(sv_results).mix(mutation_results).map { meta, _f -> meta.group }.unique()
+                : cnv_results_seg.map {meta, sample -> meta.group}.unique()
 
             // merge cnv ----------------------------------------
             cnv_seg_output = cnv_results_seg
@@ -236,10 +239,28 @@ def isDnaOnly() {
             case_sample_lists = cnv_sample_list.concat(mutation_sample_list).concat(sv_sample_list)
             all_groups_cases = all_groups.combine(case_name_all).map { g, _c -> g }
 
+            // dna-only: each label travels with its sample list, so a data type with no output
+            // (tool not run) drops its own case list instead of shifting the remaining lists
+            // onto the wrong names (the three inputs above are paired by position)
+            if (isDnaOnly()) {
+                ch_case_in = all_groups
+                    .combine(cnv_sample_list.map { ['cnv', it] }
+                        .mix(mutation_sample_list.map { ['sequenced', it] })
+                        .mix(sv_sample_list.map { ['sv', it] }))
+                    .multiMap { g, name, samples -> group: g; label: name; samples: samples }
+                case_groups  = ch_case_in.group
+                case_labels  = ch_case_in.label
+                case_samples = ch_case_in.samples
+            } else {
+                case_groups  = all_groups_cases
+                case_labels  = case_name_all
+                case_samples = case_sample_lists
+            }
+
             GENERATE_CASE_LIST(
-                all_groups_cases,
-                case_name_all,
-                case_sample_lists
+                case_groups,
+                case_labels,
+                case_samples
             )
 
             // to get all groups, just take .seg files (we assume seg and long are the same)
@@ -392,10 +413,42 @@ generic_entity_meta_properties: NAME
         meta_text_all  = channel.fromList(meta_entries.collect { it[1] })
         all_groups_meta = all_groups.combine(file_name_all).map { g, _f -> g }
 
+        // dna-only: a meta file is written only when its data file was produced, so a tool
+        // oncoanalyser did not run (e.g. no sigs/ for WES → no SBS) leaves no orphan meta file
+        if (isDnaOnly()) {
+            ch_present = cnv_seg_output.map { g, _f -> [g, 'cna_hg38'] }
+                .mix(cnv_long_output.map        { g, _f -> [g, 'cna_long'] })
+                .mix(sv_output.map              { g, _f -> [g, 'sv'] })
+                .mix(mutation_output.map        { g, _f -> [g, 'sequenced'] })
+                .mix(sigs_output.map            { g, _f -> [g, 'mutational_signatures_contribution_SBS'] })
+                .mix(sigs_counts_output.map     { g, _f -> [g, 'mutational_signatures_counts_SBS'] })
+                .mix(sigs_dbs_output.map        { g, _f -> [g, 'mutational_signatures_contribution_DBS'] })
+                .mix(sigs_counts_dbs_output.map { g, _f -> [g, 'mutational_signatures_counts_DBS'] })
+                .mix(sigs_id_output.map         { g, _f -> [g, 'mutational_signatures_contribution_ID'] })
+                .mix(sigs_counts_id_output.map  { g, _f -> [g, 'mutational_signatures_counts_ID'] })
+                .map { g, name -> "${g}/${name}".toString() }
+                .collect()
+                .map { it.toSet() }
+                .ifEmpty([] as Set)
+
+            ch_meta_in = all_groups
+                .combine(channel.fromList(meta_entries))
+                .combine(ch_present)
+                .filter { g, name, _text, present -> "${g}/${name}".toString() in present }
+                .multiMap { g, name, text, _present -> group: g; label: name; text: text }
+            meta_groups = ch_meta_in.group
+            meta_labels = ch_meta_in.label
+            meta_texts  = ch_meta_in.text
+        } else {
+            meta_groups = all_groups_meta
+            meta_labels = file_name_all
+            meta_texts  = meta_text_all
+        }
+
         GENERATE_META_FILE(
-            all_groups_meta,
-            file_name_all,
-            meta_text_all
+            meta_groups,
+            meta_labels,
+            meta_texts
         )
 
     emit:

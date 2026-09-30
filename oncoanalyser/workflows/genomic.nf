@@ -38,6 +38,14 @@ def findOncoFile(meta, path_str, label) {
     return f
 }
 
+// dna-only: oncoanalyser runs only a subset of tools on WES/DNA-only data (e.g. no sigs/).
+// A subject whose <folder>/<tool>/ directory is absent is dropped from that tool's channels
+// without a per-subject warning (one summary line per tool is logged instead). A present
+// folder with a missing file still warns via findOncoFile. Always true in "both" mode.
+def hasToolOutput(meta, tool) {
+    return !isDnaOnly() || file("${meta.folder}/${tool}", checkIfExists: false).isDirectory()
+}
+
 // Subject is complete (and skipped) only if all expected per-subject outputs exist.
 // Cached files must only be reused for skipped subjects — a subject that is re-run and
 // also read from cache reaches the merge steps twice (name collision / duplicated rows).
@@ -206,6 +214,7 @@ workflow GENOMIC {
         // dna-only: oncoanalyser never runs PAVE/sage_append without RNA, so the somatic
         // VCF is the raw SAGE output (sage/somatic/) rather than the PAVE-annotated one
         ch_sage_vcf = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'sage/somatic') }
             .map { meta ->
                 def vcf = isDnaOnly()
                     ? findOncoFile(meta,
@@ -220,6 +229,7 @@ workflow GENOMIC {
 
         // SAGE germline VCF → germline mutations (same dna-only caveat as above)
         ch_sage_germline_vcf = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'sage/germline') }
             .map { meta ->
                 def vcf = isDnaOnly()
                     ? findOncoFile(meta,
@@ -246,6 +256,7 @@ workflow GENOMIC {
 
         // PURPLE CNV somatic + gene TSV → copy-number
         ch_purple_cnv = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'purple') }
             .map { meta ->
                 def somatic = findOncoFile(meta,
                     "${meta.folder}/purple/${meta.subject}-T.purple.cnv.somatic.tsv",
@@ -259,6 +270,7 @@ workflow GENOMIC {
 
         // ESVEE unfiltered VCF (tumor only) → structural variants
         ch_esvee_vcf = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'esvee') }
             .map { meta ->
                 def vcf = findOncoFile(meta,
                     "${meta.folder}/esvee/${meta.subject}-T.esvee.somatic.vcf.gz",
@@ -293,6 +305,7 @@ workflow GENOMIC {
 
         // SBS signature fitting: reuse snv_counts.csv with pipeline:'sigs' for cache compatibility
         ch_sigs_for_assignment = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'sigs') }
             .map { meta ->
                 def f = findOncoFile(meta,
                     "${meta.folder}/sigs/${meta.subject}-T.sig.snv_counts.csv",
@@ -303,6 +316,7 @@ workflow GENOMIC {
 
         // DBS signature fitting: extract from PAVE somatic VCF (raw SAGE somatic in dna-only)
         ch_sigs_dbs = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'sage/somatic') }
             .map { meta ->
                 def f = isDnaOnly()
                     ? findOncoFile(meta,
@@ -317,6 +331,7 @@ workflow GENOMIC {
 
         // ID signature fitting: extract indels from PAVE somatic VCF (raw SAGE somatic in dna-only)
         ch_sigs_id = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'sage/somatic') }
             .map { meta ->
                 def f = isDnaOnly()
                     ? findOncoFile(meta,
@@ -331,6 +346,7 @@ workflow GENOMIC {
 
         // SIGS SNV counts CSV → mutational signature trinucleotide counts
         ch_sigs_counts = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'sigs') }
             .map { meta ->
                 def snv_counts = findOncoFile(meta,
                     "${meta.folder}/sigs/${meta.subject}-T.sig.snv_counts.csv",
@@ -338,6 +354,26 @@ workflow GENOMIC {
                 snv_counts ? [meta + [pipeline: 'sigs_counts'], snv_counts] : null
             }
             .filter { it != null }
+
+        // dna-only: one summary line per oncoanalyser tool whose output folder is absent
+        if (isDnaOnly()) {
+            [
+                'sage/somatic' : 'mutations and DBS/ID signatures',
+                'sage/germline': 'germline mutations (CPSR)',
+                'purple'       : 'copy number',
+                'esvee'        : 'structural variants',
+                'sigs'         : 'SBS signatures',
+            ].each { tool, steps ->
+                ch_samples_to_run
+                    .map { meta -> hasToolOutput(meta, tool) ? 0 : 1 }
+                    .reduce([0, 0]) { acc, missing -> [acc[0] + missing, acc[1] + 1] }
+                    .subscribe { counts ->
+                        if (counts[0] > 0) {
+                            log.warn "dna-only: ${tool}/ absent for ${counts[0]}/${counts[1]} subject(s); ${steps} skipped for those subjects"
+                        }
+                    }
+            }
+        }
 
         // ── Run subworkflows ──────────────────────────────────────────────────
 
@@ -484,6 +520,7 @@ reference_genome: hg38
             .mix(GENOMIC_AGGREGATE_OUTPUT.out.sigs_dbs)
             .mix(GENOMIC_AGGREGATE_OUTPUT.out.sigs_counts_dbs)
             .mix(GENOMIC_AGGREGATE_OUTPUT.out.sigs_id)
+            .mix(GENOMIC_AGGREGATE_OUTPUT.out.sigs_counts_id)
             .mix(GENOMIC_AGGREGATE_OUTPUT.out.meta_files)
             .mix(GENOMIC_AGGREGATE_OUTPUT.out.case_files)
             .mix(GENERATE_META_FILE.out)
