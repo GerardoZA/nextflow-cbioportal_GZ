@@ -11,7 +11,9 @@ include { GENOMIC_MUTATIONS            } from '../subworkflows/local/genomic_mut
 include { GENOMIC_ML                   } from '../subworkflows/local/genomic_ml'
 include { GENOMIC_AGGREGATE_OUTPUT     } from '../subworkflows/local/genomic_aggregate_output'
 include { GENERATE_META_FILE           } from '../modules/local/generate_meta_file'
+include { GENERATE_META_FILE as GENERATE_META_FILE_CLINICAL } from '../modules/local/generate_meta_file'
 include { GENERATE_CANCER_TYPE        } from '../modules/local/generate_cancer_type'
+include { GENERATE_CLINICAL_SAMPLE     } from '../modules/local/generate_clinical_sample'
 include { ISOFOX_FUSION_TO_CBIOPORTAL  } from '../modules/local/isofox_fusion_to_cbioportal'
 include { MERGE_SAMPLE_SV              } from '../modules/local/merge_sample_sv'
 include { SIGPROFILER_SBS               } from '../modules/local/sigprofiler_sbs'
@@ -508,6 +510,52 @@ reference_genome: hg38
             }
         }
 
+        // ── Clinical sample template (dna-only, genomic mode) ────────────────
+        // cBioPortal's validateData.py stops at "No sample attribute file detected" without a
+        // clinical sample file, and --mode genomic never runs CLINICAL. Only values the pipeline
+        // knows are written (samplesheet subject_id / sample_id, params.cancer_type); every
+        // other column is left empty for the user — nothing is inferred. Not done in --mode
+        // both, where CLINICAL writes its own data_clinical_sample.txt to the same folder.
+
+        ch_clinical_sample = Channel.empty()
+        if (isDnaOnly() && params.mode == 'genomic') {
+            ch_clinical_lines = ch_samples
+                .map { meta -> tuple(meta.group, "${meta.subject}\t${meta.sample}".toString()) }
+                .unique()
+                .groupTuple()
+                .map { group, lines -> tuple(group, lines.sort(false).join('\n')) }
+
+            GENERATE_CLINICAL_SAMPLE(ch_clinical_lines)
+
+            meta_text_clinical = """cancer_study_identifier: add_text
+genetic_alteration_type: CLINICAL
+datatype: SAMPLE_ATTRIBUTES
+data_filename: data_clinical_sample.txt
+        """
+
+            GENERATE_META_FILE_CLINICAL(all_groups, "clinical_sample", meta_text_clinical)
+
+            ch_clinical_sample = GENERATE_CLINICAL_SAMPLE.out.clinical_sample
+                .mix(GENERATE_META_FILE_CLINICAL.out)
+
+            GENERATE_CLINICAL_SAMPLE.out.clinical_sample
+                .subscribe { group, _f ->
+                    def filled_cols = ['PATIENT_ID (samplesheet subject_id)', 'SAMPLE_ID (samplesheet sample_id)']
+                    def empty_cols  = ['CANCER_TYPE', 'CANCER_TYPE_DETAILED', 'SAMPLE_TYPE']
+                    if (params.cancer_type) {
+                        filled_cols << 'ONCOTREE_CODE (cancer_type)'
+                    } else {
+                        empty_cols.add(0, 'ONCOTREE_CODE')
+                    }
+                    def msg = "ACTION REQUIRED: data_clinical_sample.txt is a TEMPLATE and STILL NEEDS TO BE FILLED IN " +
+                        "before cBioPortal import: ${params.outdir}/${group}/data_clinical_sample.txt " +
+                        "(the copy inside ${group}.tar.gz is the same unfilled template). " +
+                        "Columns left empty: ${empty_cols.join(', ')}. " +
+                        "Filled by the pipeline: ${filled_cols.join(', ')}. Nothing was inferred."
+                    log.warn(msg)
+                }
+        }
+
         // ── Package all cBioPortal files into a tar.gz per group ──────────────
 
         all_package_files = GENOMIC_AGGREGATE_OUTPUT.out.cnv
@@ -525,6 +573,7 @@ reference_genome: hg38
             .mix(GENOMIC_AGGREGATE_OUTPUT.out.case_files)
             .mix(GENERATE_META_FILE.out)
             .mix(ch_cancer_type)
+            .mix(ch_clinical_sample)
             .groupTuple()
 
         PACKAGE_CBIOPORTAL(all_package_files)

@@ -69,6 +69,20 @@ PER-GROUP AGGREGATED FILES
     cases_cnv.txt          Samples with copy-number data
     cases_sequenced.txt    Samples with mutation data
 
+  Clinical sample template (--type dna-only with --mode genomic only):
+
+    data_clinical_sample.txt   One row per samplesheet sample. Filled:
+                               PATIENT_ID (subject_id), SAMPLE_ID
+                               (sample_id), ONCOTREE_CODE (cancer_type).
+                               Left empty: CANCER_TYPE,
+                               CANCER_TYPE_DETAILED, SAMPLE_TYPE.
+    meta_clinical_sample.txt   Metadata for the sample attributes.
+
+    cBioPortal requires a clinical sample file, so this template lets
+    the study be validated. The empty columns are not inferred and must
+    be filled in by hand before import; the run logs an "ACTION
+    REQUIRED" warning in .nextflow.log as a reminder.
+
   Utility files:
 
     util_linking_file.txt  TSV mapping subject_id to sample_id

@@ -1,0 +1,73 @@
+nextflow_process {
+
+    name "Test GENERATE_CLINICAL_SAMPLE module"
+    script "modules/local/generate_clinical_sample/main.nf"
+    process "GENERATE_CLINICAL_SAMPLE"
+    tag "module"
+    tag "clinical"
+
+    test("Template — IDs from the samplesheet, OncoTree code from cancer_type, unknown columns empty") {
+
+        when {
+            params {
+                outdir      = "$outputDir"
+                cancer_type = "brca"
+            }
+            process {
+                """
+                // Unsorted on purpose — rows must come out sorted by sample_id
+                input[0] = Channel.of(['TEST', 'S2\\tS2-T\\nS1\\tS1-T'])
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assert process.out.clinical_sample.size() == 1
+
+            def out_path = process.out.clinical_sample[0][1].toString()
+            assert out_path.endsWith('data_clinical_sample.txt')
+
+            def lines = path(out_path).readLines()
+            assert lines.size() == 7
+
+            // Four '#' attribute-definition rows, six tab-separated fields each, none blank
+            lines[0..3].each { line ->
+                assert line.startsWith('#')
+                def fields = line.substring(1).split('\t', -1)
+                assert fields.size() == 6
+                assert fields.every { it.trim() != '' }
+            }
+            assert lines[2] == '#STRING\tSTRING\tSTRING\tSTRING\tSTRING\tSTRING'
+
+            assert lines[4] == 'PATIENT_ID\tSAMPLE_ID\tONCOTREE_CODE\tCANCER_TYPE\tCANCER_TYPE_DETAILED\tSAMPLE_TYPE'
+
+            // PATIENT_ID = subject_id, SAMPLE_ID = sample_id, code upper-cased, the rest empty
+            assert lines[5] == 'S1\tS1-T\tBRCA\t\t\t'
+            assert lines[6] == 'S2\tS2-T\tBRCA\t\t\t'
+        }
+    }
+
+    test("Template — cancer_type not set leaves ONCOTREE_CODE empty too") {
+
+        when {
+            params {
+                outdir      = "$outputDir"
+                cancer_type = ""
+            }
+            process {
+                """
+                input[0] = Channel.of(['TEST', 'S1\\tS1-T'])
+                """
+            }
+        }
+
+        then {
+            assert process.success
+
+            def lines = path(process.out.clinical_sample[0][1].toString()).readLines()
+            assert lines.size() == 6
+            assert lines[5] == 'S1\tS1-T\t\t\t\t'
+        }
+    }
+}
