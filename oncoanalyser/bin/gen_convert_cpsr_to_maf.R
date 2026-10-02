@@ -215,6 +215,19 @@ convert_cpsr_to_maf <- function(cpsr_file, maf_file, output_file) {
       maf_entry$Tumor_Seq_Allele1 <- deleted
       maf_entry$Tumor_Seq_Allele2 <- "-"
       maf_entry$Variant_Type <- "DEL"
+
+    } else if (variant_class == "substitution") {
+      # For multi-nucleotide substitutions (e.g., "2_214767531_CA_TG"): ref and alt have the same length
+      maf_entry$Start_Position <- as.character(pos)
+      maf_entry$End_Position <- as.character(pos + nchar(ref) - 1)
+      maf_entry$Reference_Allele <- ref
+      maf_entry$Tumor_Seq_Allele1 <- ref
+      maf_entry$Tumor_Seq_Allele2 <- alt
+      maf_entry$Variant_Type <- switch(as.character(nchar(ref)), "2" = "DNP", "3" = "TNP", "ONP")
+
+    } else {
+      cat("WARNING: unhandled VARIANT_CLASS '", variant_class, "' for ", cpsr_entry$VAR_ID,
+          ": position and alleles left empty\n", sep = "")
     }
 
     # Map matched normal alleles
@@ -258,6 +271,19 @@ convert_cpsr_to_maf <- function(cpsr_file, maf_file, output_file) {
       maf_entry$Variant_Classification <- "Silent"
     } else if (grepl("splice_donor_variant", csq) || grepl("splice_acceptor_variant", csq)) {
       maf_entry$Variant_Classification <- "Splice_Site"
+    } else if (grepl("frameshift", csq)) {
+      # MAF has no plain "Frame_Shift": the longer allele tells deletion from insertion
+      maf_entry$Variant_Classification <- if (nchar(ref) > nchar(alt)) "Frame_Shift_Del" else "Frame_Shift_Ins"
+    } else if (grepl("stop_lost", csq)) {
+      maf_entry$Variant_Classification <- "Nonstop_Mutation"
+    } else if (grepl("start_lost", csq)) {
+      maf_entry$Variant_Classification <- "Translation_Start_Site"
+    } else if (grepl("inframe_insertion", csq)) {
+      maf_entry$Variant_Classification <- "In_Frame_Ins"
+    } else if (grepl("inframe_deletion", csq)) {
+      maf_entry$Variant_Classification <- "In_Frame_Del"
+    } else if (grepl("protein_altering_variant", csq)) {
+      maf_entry$Variant_Classification <- if (nchar(ref) > nchar(alt)) "In_Frame_Del" else "In_Frame_Ins"
     } else if (grepl("3_prime_UTR_variant", csq)) {
       maf_entry$Variant_Classification <- "3'UTR"
     } else if (grepl("5_prime_UTR_variant", csq)) {
@@ -270,8 +296,6 @@ convert_cpsr_to_maf <- function(cpsr_file, maf_file, output_file) {
       maf_entry$Variant_Classification <- "Intron"
     } else if (grepl("nonsense", csq) || grepl("stop_gained", csq)) {
       maf_entry$Variant_Classification <- "Nonsense_Mutation"
-    } else if (grepl("frameshift", csq)) {
-      maf_entry$Variant_Classification <- "Frame_Shift"
     } else if (csq == "NA" || csq == "") {
       maf_entry$Variant_Classification <- "IGR"  # Default to intergenic if no consequence
     } else {
