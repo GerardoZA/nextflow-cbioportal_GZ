@@ -151,6 +151,12 @@ Exon, Intron}`. Isofox records a transcript + exon rank only when the breakend f
 - Germline has priority in `gen_convert_cpsr_to_maf.R`: a somatic row that is the same variant as a
   CPSR call (chrom ignoring `chr`, `Start_Position`, `Reference_Allele`, `Tumor_Seq_Allele2`) is
   dropped, so only the CPSR row remains. CPSR rows get the `chr` prefix like the mafsmith rows
+- CPSR rows in the MAF (`gen_convert_cpsr_to_maf.R`): `VARIANT_CLASS` `SNV` / `insertion` / `deletion` /
+  `substitution` (MNV → `DNP`/`TNP`/`ONP`) get coordinates and alleles; any other class (e.g. `indel`)
+  is logged as a WARNING and left without position. `Variant_Classification` must be a cBioPortal MAF
+  value — `Frame_Shift_Del`/`Frame_Shift_Ins` (never plain `Frame_Shift`), `In_Frame_Ins`/`In_Frame_Del`,
+  `Nonstop_Mutation`, `Translation_Start_Site`. A consequence that falls through to `IGR` (or `Intron`)
+  is removed by `CONVERT_CPSR_TO_MAF`, so an unmapped coding consequence silently loses the germline call
 - `PCGR` publishes `<sample>.cpsr_debug/` (CPSR log, input/pass-VCF GT summary, CPSR's side outputs);
   its outputs are named `tsv` and `debug`. `ext.args = '--debug'` keeps CPSR's intermediate VCFs
 - CPSR names its output after `--sample_id` (`<subject>-N`); `PCGR` renames it to the
