@@ -118,4 +118,93 @@ nextflow_workflow {
             assert cnv_case_list.any { it.startsWith('case_list_ids:') }
         }
     }
+
+    test("type=dna-only — no expression data or meta file produced, even with TPM input supplied") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+                type   = 'dna-only'
+            }
+            workflow {
+                """
+                file("${params.outdir}/TEST").mkdirs()
+
+                input[0] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1'],
+                        file('${projectDir}/assets/test_data/precomputed/T1_data_cna_hg38.seg')
+                    ],
+                    [
+                        [group: 'TEST', subject: 'T2', sample: 'T2'],
+                        file('${projectDir}/assets/test_data/precomputed/T2_data_cna_hg38.seg')
+                    ]
+                )
+                input[1] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1'],
+                        file('${projectDir}/assets/test_data/precomputed/T1_data_cna_long.txt')
+                    ],
+                    [
+                        [group: 'TEST', subject: 'T2', sample: 'T2'],
+                        file('${projectDir}/assets/test_data/precomputed/T2_data_cna_long.txt')
+                    ]
+                )
+                input[2] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1'],
+                        file('${projectDir}/assets/test_data/precomputed/T1.data_sv.txt')
+                    ],
+                    [
+                        [group: 'TEST', subject: 'T2', sample: 'T2'],
+                        file('${projectDir}/assets/test_data/precomputed/T2.data_sv.txt')
+                    ]
+                )
+                // TPM files supplied on purpose — dna-only mode must still omit expression output
+                input[3] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1'],
+                        file('${projectDir}/assets/test_data/precomputed/T1.tpm.tsv')
+                    ],
+                    [
+                        [group: 'TEST', subject: 'T2', sample: 'T2'],
+                        file('${projectDir}/assets/test_data/precomputed/T2.tpm.tsv')
+                    ]
+                )
+                input[4] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1'],
+                        file('${projectDir}/assets/test_data/precomputed/T1.somatic_rna_germline.maf')
+                    ],
+                    [
+                        [group: 'TEST', subject: 'T2', sample: 'T2'],
+                        file('${projectDir}/assets/test_data/precomputed/T2.somatic_rna_germline.maf')
+                    ]
+                )
+                input[5] = Channel.empty()
+                input[6] = Channel.empty()
+                input[7] = Channel.empty()
+                input[8] = Channel.empty()
+                input[9] = Channel.empty()
+                input[10] = Channel.empty()
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+
+            // Non-expression outputs still produced as normal
+            assert path("${params.outdir}/TEST/data_cna_hg38.seg").exists()
+            assert path("${params.outdir}/TEST/data_sv.txt").exists()
+            assert path("${params.outdir}/TEST/data_cna_long.txt").exists()
+            assert path("${params.outdir}/TEST/data_mutations_dna_rna_germline.txt").exists()
+            assert path("${params.outdir}/TEST/meta_cna_hg38.txt").exists()
+            assert path("${params.outdir}/TEST/meta_sv.txt").exists()
+
+            // No expression data file and no orphan expression meta file
+            assert !path("${params.outdir}/TEST/data_expression.txt").exists()
+            assert !path("${params.outdir}/TEST/meta_expression.txt").exists()
+        }
+    }
 }

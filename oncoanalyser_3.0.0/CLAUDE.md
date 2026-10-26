@@ -8,6 +8,12 @@ Requires Nextflow >= 26.04.4.
 
 ## Key Rules
 
+- `--type both` (default) or `--type dna-only` — dna-only skips all RNA-derived processing
+  (Isofox expression, Isofox fusion, SAGE RNA-append) and omits the expression profile/meta
+  file, even if RNA files exist on disk. `workflows/genomic.nf` hands those channels
+  `channel.empty()`, so every subject reaches `INTEGRATE_RNA_VARIANTS` with `[]` and its MAF
+  keeps the empty `RNA.*` columns. Validated in `subworkflows/local/utils/main.nf`.
+  Mutational signature fitting (Sigs) is DNA-only either way
 - R scripts → `container_r`; Python → `container_python`; SigProfiler → `container_sigprofiler`;
   VCF→MAF → `container_mafsmith`
 - **VCF→MAF is `MAFSMITH` (nf-osi/mafsmith), not vcf2maf** (since 4.0.0).

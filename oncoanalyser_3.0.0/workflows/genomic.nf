@@ -245,15 +245,17 @@ workflow GENOMIC {
             }
             .filter { it != null }
 
-        // SAGE RNA-append VCF → somatic RNA mutations
-        ch_sage_rna_vcf = ch_samples_to_run
-            .map { meta ->
-                def vcf = findOncoFile(meta,
-                    "${meta.folder}/sage_append/${meta.subject}-T/${meta.subject}-T.sage.append.vcf.gz",
-                    'mutation (SAGE RNA append)')
-                vcf ? [meta + [pipeline: 'mutation_rna'], vcf] : null
-            }
-            .filter { it != null }
+        // SAGE RNA-append VCF → somatic RNA mutations (skipped entirely in dna-only mode)
+        ch_sage_rna_vcf = params.type == 'dna-only'
+            ? channel.empty()
+            : ch_samples_to_run
+                .map { meta ->
+                    def vcf = findOncoFile(meta,
+                        "${meta.folder}/sage_append/${meta.subject}-T/${meta.subject}-T.sage.append.vcf.gz",
+                        'mutation (SAGE RNA append)')
+                    vcf ? [meta + [pipeline: 'mutation_rna'], vcf] : null
+                }
+                .filter { it != null }
 
         // PURPLE CNV somatic + gene TSV → copy-number
         // The purity file is optional: it only supplies the sample's sex for the
@@ -286,25 +288,29 @@ workflow GENOMIC {
             }
             .filter { it != null }
 
-        // Isofox gene expression CSV → TPM
-        ch_isofox_exp = ch_samples_to_run
-            .map { meta ->
-                def exp = findOncoFile(meta,
-                    "${meta.folder}/isofox/${meta.subject}-T.isf.gene_data.tsv",
-                    'expression (Isofox)')
-                exp ? [meta + [pipeline: 'expression'], exp] : null
-            }
-            .filter { it != null }
+        // Isofox gene expression CSV → TPM (skipped entirely in dna-only mode)
+        ch_isofox_exp = params.type == 'dna-only'
+            ? channel.empty()
+            : ch_samples_to_run
+                .map { meta ->
+                    def exp = findOncoFile(meta,
+                        "${meta.folder}/isofox/${meta.subject}-T.isf.gene_data.tsv",
+                        'expression (Isofox)')
+                    exp ? [meta + [pipeline: 'expression'], exp] : null
+                }
+                .filter { it != null }
 
-        // Isofox pass_fusions CSV (tumor RNA) → RNA fusions for data_sv.txt
-        ch_isofox_fusion = ch_samples_to_run
-            .map { meta ->
-                def fusions = findOncoFile(meta,
-                    "${meta.folder}/isofox/${meta.subject}-T.isf.pass_fusions.tsv",
-                    'rna fusion (Isofox)')
-                fusions ? [meta + [pipeline: 'sv_rna_fusion'], fusions] : null
-            }
-            .filter { it != null }
+        // Isofox pass_fusions CSV (tumor RNA) → RNA fusions for data_sv.txt (skipped entirely in dna-only mode)
+        ch_isofox_fusion = params.type == 'dna-only'
+            ? channel.empty()
+            : ch_samples_to_run
+                .map { meta ->
+                    def fusions = findOncoFile(meta,
+                        "${meta.folder}/isofox/${meta.subject}-T.isf.pass_fusions.tsv",
+                        'rna fusion (Isofox)')
+                    fusions ? [meta + [pipeline: 'sv_rna_fusion'], fusions] : null
+                }
+                .filter { it != null }
 
         // SBS signature fitting: reuse snv_counts.csv with pipeline:'sigs' for cache compatibility
         ch_sigs_for_assignment = ch_samples_to_run
