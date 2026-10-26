@@ -21,6 +21,13 @@ include { SIGS_COUNTS_TO_CBIOPORTAL    } from '../modules/local/sigs_counts_to_c
 include { resource                     } from '../subworkflows/local/utils'
 
 
+// True when running without RNA data. Compares case-insensitively because params values
+// given on the command line are immutable — "--type DNA-only" cannot be normalised in
+// place by the validator, so a plain `params.type == 'dna-only'` would silently be false.
+def isDnaOnly() {
+    return (params.type ?: 'both').toString().toLowerCase() == 'dna-only'
+}
+
 // Resolve an oncoanalyser output file path; log a warning and return null if absent.
 def findOncoFile(meta, path_str, label) {
     def f = file(path_str, checkIfExists: false)
@@ -39,7 +46,7 @@ def findOncoFile(meta, path_str, label) {
 def findVariantVcf(meta, kind, label) {
     def pave = "${meta.folder}/pave/${kind}/${meta.subject}-T.pave.${kind}.vcf.gz"
     def pave_f = file(pave, checkIfExists: false)
-    if (params.type != 'dna-only' || (pave_f.exists() && !pave_f.isEmpty())) {
+    if (!isDnaOnly() || (pave_f.exists() && !pave_f.isEmpty())) {
         return findOncoFile(meta, pave, "${label} (PAVE ${kind})")
     }
     return findOncoFile(meta,
@@ -258,7 +265,7 @@ workflow GENOMIC {
             .filter { it != null }
 
         // SAGE RNA-append VCF → somatic RNA mutations (skipped entirely in dna-only mode)
-        ch_sage_rna_vcf = params.type == 'dna-only'
+        ch_sage_rna_vcf = isDnaOnly()
             ? channel.empty()
             : ch_samples_to_run
                 .map { meta ->
@@ -301,7 +308,7 @@ workflow GENOMIC {
             .filter { it != null }
 
         // Isofox gene expression CSV → TPM (skipped entirely in dna-only mode)
-        ch_isofox_exp = params.type == 'dna-only'
+        ch_isofox_exp = isDnaOnly()
             ? channel.empty()
             : ch_samples_to_run
                 .map { meta ->
@@ -313,7 +320,7 @@ workflow GENOMIC {
                 .filter { it != null }
 
         // Isofox pass_fusions CSV (tumor RNA) → RNA fusions for data_sv.txt (skipped entirely in dna-only mode)
-        ch_isofox_fusion = params.type == 'dna-only'
+        ch_isofox_fusion = isDnaOnly()
             ? channel.empty()
             : ch_samples_to_run
                 .map { meta ->
