@@ -32,6 +32,14 @@ Requires Nextflow >= 26.04.4.
   label travels with its sample list and an empty (`toList()` → `""`) list is dropped. `.tpm.tsv`
   is not `required` in `subjectOutputs()` under dna-only. "both" mode keeps the fixed meta and case lists
 - `cancer_type` must be an OncoTree code (https://oncotree.mskcc.org/) already in the target portal
+- `--type dna-only` with `--mode genomic` ends by writing a **template** `data_clinical_sample.txt` +
+  `meta_clinical_sample.txt` (`GENERATE_CLINICAL_SAMPLE`, `bin/gen_clinical_sample_template.py`),
+  because `validateData.py` stops at "No sample attribute file detected" without one and
+  `--mode genomic` never runs `CLINICAL`. Only known values are filled: `PATIENT_ID` = samplesheet
+  `subject_id`, `SAMPLE_ID` = `sample_id`, `ONCOTREE_CODE` = `cancer_type` upper-cased.
+  `CANCER_TYPE`, `CANCER_TYPE_DETAILED` and `SAMPLE_TYPE` are left empty on purpose — never infer
+  them. A `log.warn` ("ACTION REQUIRED … STILL NEEDS TO BE FILLED IN") marks this. Not run in
+  `--mode both`, where `CLINICAL` (or its `GENERATE_CLINICAL_TEMPLATE` fallback) writes the file
 - R scripts → `container_r`; Python → `container_python`; SigProfiler → `container_sigprofiler`;
   VCF→MAF → `container_mafsmith`
 - **VCF→MAF is `MAFSMITH` (nf-osi/mafsmith), not vcf2maf** (since 4.0.0).
