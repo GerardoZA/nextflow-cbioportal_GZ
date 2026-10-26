@@ -127,6 +127,12 @@ Exon, Intron}`. Isofox records a transcript + exon rank only when the breakend f
   aborts on an input INFO tag that clashes with its own (PAVE's `IMPACT`) and annotates everything
   itself. **CPSR exits 0 even when it fails**, so any `- ERROR -` line in its log fails the task;
   never let an error fall through to the header-only placeholder
+- SAGE/PAVE germline VCFs carry no genotypes (`GT=./.`), and CPSR's `vcf2tsvpy` step drops `./.`
+  rows (no CPSR flag changes this), so CPSR silently classifies nothing. `FILTER_GERMLINE_DNA`
+  therefore sets GT from the normal's `FMT/AF` (`≥0.9` → `1/1`, `>0` → `0/1`) with `bcftools +setGT`
+- Germline has priority in `gen_convert_cpsr_to_maf.R`: a somatic row that is the same variant as a
+  CPSR call (chrom ignoring `chr`, `Start_Position`, `Reference_Allele`, `Tumor_Seq_Allele2`) is
+  dropped, so only the CPSR row remains. CPSR rows get the `chr` prefix like the mafsmith rows
 - `PCGR` publishes `<sample>.cpsr_debug/` (CPSR log, input/pass-VCF GT summary, CPSR's side outputs);
   its outputs are named `tsv` and `debug`. `ext.args = '--debug'` keeps CPSR's intermediate VCFs
 - CPSR names its output after `--sample_id` (`<subject>-N`); `PCGR` renames it to the
