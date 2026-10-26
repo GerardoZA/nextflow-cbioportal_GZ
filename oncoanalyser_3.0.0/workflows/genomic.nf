@@ -39,21 +39,39 @@ def findOncoFile(meta, path_str, label) {
 }
 
 
+// True when the subject's PAVE somatic or germline (kind) VCF exists and is non-empty.
+def hasPaveVcf(meta, kind) {
+    def f = file("${meta.folder}/pave/${kind}/${meta.subject}-T.pave.${kind}.vcf.gz", checkIfExists: false)
+    return f.exists() && !f.isEmpty()
+}
+
 // Somatic or germline (kind) variant VCF for a subject. "both" reads PAVE. dna-only prefers
 // PAVE too, and falls back to the raw SAGE VCF only when oncoanalyser wrote no PAVE file for
 // the subject (it can skip PAVE/sage_append without RNA). Raw SAGE carries no PAVE INFO, so
 // gnomAD_AF and the HMF.* MAF columns stay empty for a subject read from it.
 def findVariantVcf(meta, kind, label) {
-    def pave = "${meta.folder}/pave/${kind}/${meta.subject}-T.pave.${kind}.vcf.gz"
-    def pave_f = file(pave, checkIfExists: false)
-    if (!isDnaOnly() || (pave_f.exists() && !pave_f.isEmpty())) {
-        return findOncoFile(meta, pave, "${label} (PAVE ${kind})")
+    if (!isDnaOnly() || hasPaveVcf(meta, kind)) {
+        return findOncoFile(meta,
+            "${meta.folder}/pave/${kind}/${meta.subject}-T.pave.${kind}.vcf.gz",
+            "${label} (PAVE ${kind})")
     }
     return findOncoFile(meta,
         "${meta.folder}/sage/${kind}/${meta.subject}-T.sage.${kind}.vcf.gz",
         "${label} (SAGE ${kind}, dna-only fallback)")
 }
 
+// dna-only: oncoanalyser runs only a subset of tools on WES/DNA-only data (e.g. no sigs/).
+// A subject whose <folder>/<tool>/ directory is absent is dropped from that tool's channels
+// without a per-subject warning (one summary line per tool is logged instead). A present
+// folder with a missing file still warns via findOncoFile. Always true in "both" mode.
+def hasToolOutput(meta, tool) {
+    return !isDnaOnly() || file("${meta.folder}/${tool}", checkIfExists: false).isDirectory()
+}
+
+// A somatic or germline (kind) variant VCF can come from pave/ or, in dna-only, sage/.
+def hasVariantVcf(meta, kind) {
+    return hasToolOutput(meta, "pave/${kind}") || hasToolOutput(meta, "sage/${kind}")
+}
 
 // Every per-subject file this workflow publishes to <outdir>/<group>/<subject>/.
 //
@@ -67,13 +85,14 @@ def findVariantVcf(meta, kind, label) {
 //   required — must exist for the subject to count as processed. The signature
 //              files are optional: SigProfiler legitimately emits nothing for a
 //              subject with too few mutations, and gating on them would
-//              reprocess such a subject on every single run.
+//              reprocess such a subject on every single run. Expression is
+//              optional under dna-only, which never writes .tpm.tsv.
 def subjectOutputs() {
     return [
         [tag: 'cnv_seg',         suffix: '_data_cna_hg38.seg',                               required: true ],
         [tag: 'cnv_long',        suffix: '_data_cna_long.txt',                               required: true ],
         [tag: 'sv',              suffix: '.data_sv.txt',                                     required: true ],
-        [tag: 'expression',      suffix: '.tpm.tsv',                                         required: true ],
+        [tag: 'expression',      suffix: '.tpm.tsv',                                         required: !isDnaOnly()],
         [tag: 'mutation',        suffix: '.somatic_rna_germline.maf',                        required: true ],
         [tag: 'sigs',            suffix: '.data_mutational_signatures_contribution_SBS.txt', required: false],
         [tag: 'sigs_counts',     suffix: '.data_mutational_signatures_counts_SBS.txt',       required: false],
@@ -250,6 +269,7 @@ workflow GENOMIC {
 
         // PAVE somatic VCF → mutations (dna-only: raw SAGE when pave/ is absent, see findVariantVcf)
         ch_sage_vcf = ch_samples_to_run
+            .filter { meta -> hasVariantVcf(meta, 'somatic') }
             .map { meta ->
                 def vcf = findVariantVcf(meta, 'somatic', 'mutation')
                 vcf ? [meta + [pipeline: 'mutation'], vcf] : null
@@ -258,6 +278,7 @@ workflow GENOMIC {
 
         // PAVE germline VCF → germline mutations (same dna-only fallback as above)
         ch_sage_germline_vcf = ch_samples_to_run
+            .filter { meta -> hasVariantVcf(meta, 'germline') }
             .map { meta ->
                 def vcf = findVariantVcf(meta, 'germline', 'germline mutation')
                 vcf ? [meta + [pipeline: 'mutation_germline'], vcf] : null
@@ -281,6 +302,7 @@ workflow GENOMIC {
         // chrX/chrY baseline, so a subject without one still gets CNV output —
         // just with a diploid baseline everywhere, same as before this file existed.
         ch_purple_cnv = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'purple') }
             .map { meta ->
                 def somatic = findOncoFile(meta,
                     "${meta.folder}/purple/${meta.subject}-T.purple.cnv.somatic.tsv",
@@ -299,6 +321,7 @@ workflow GENOMIC {
 
         // ESVEE somatic VCF (tumor only) → structural variants
         ch_esvee_vcf = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'esvee') }
             .map { meta ->
                 def vcf = findOncoFile(meta,
                     "${meta.folder}/esvee/${meta.subject}-T.esvee.somatic.vcf.gz",
@@ -333,6 +356,7 @@ workflow GENOMIC {
 
         // SBS signature fitting: reuse snv_counts.csv with pipeline:'sigs' for cache compatibility
         ch_sigs_for_assignment = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'sigs') }
             .map { meta ->
                 def f = findOncoFile(meta,
                     "${meta.folder}/sigs/${meta.subject}-T.sig.snv_counts.csv",
@@ -343,6 +367,7 @@ workflow GENOMIC {
 
         // DBS signature fitting: extract from PAVE somatic VCF (dna-only: raw SAGE fallback)
         ch_sigs_dbs = ch_samples_to_run
+            .filter { meta -> hasVariantVcf(meta, 'somatic') }
             .map { meta ->
                 def f = findVariantVcf(meta, 'somatic', 'SigProfiler DBS')
                 f ? [meta + [pipeline: 'sigs_dbs'], f] : null
@@ -351,6 +376,7 @@ workflow GENOMIC {
 
         // ID signature fitting: extract indels from PAVE somatic VCF (dna-only: raw SAGE fallback)
         ch_sigs_id = ch_samples_to_run
+            .filter { meta -> hasVariantVcf(meta, 'somatic') }
             .map { meta ->
                 def f = findVariantVcf(meta, 'somatic', 'SigProfiler ID')
                 f ? [meta + [pipeline: 'sigs_id'], f] : null
@@ -359,6 +385,7 @@ workflow GENOMIC {
 
         // SIGS SNV counts CSV → mutational signature trinucleotide counts
         ch_sigs_counts = ch_samples_to_run
+            .filter { meta -> hasToolOutput(meta, 'sigs') }
             .map { meta ->
                 def snv_counts = findOncoFile(meta,
                     "${meta.folder}/sigs/${meta.subject}-T.sig.snv_counts.csv",
@@ -366,6 +393,44 @@ workflow GENOMIC {
                 snv_counts ? [meta + [pipeline: 'sigs_counts'], snv_counts] : null
             }
             .filter { it != null }
+
+        // dna-only: one summary line per oncoanalyser tool whose output folder is absent
+        if (isDnaOnly()) {
+            [
+                'purple'       : 'copy number',
+                'esvee'        : 'structural variants',
+                'sigs'         : 'SBS signatures',
+            ].each { tool, steps ->
+                ch_samples_to_run
+                    .map { meta -> hasToolOutput(meta, tool) ? 0 : 1 }
+                    .reduce([0, 0]) { acc, missing -> [acc[0] + missing, acc[1] + 1] }
+                    .subscribe { counts ->
+                        if (counts[0] > 0) {
+                            log.warn "dna-only: ${tool}/ absent for ${counts[0]}/${counts[1]} subject(s); ${steps} skipped for those subjects"
+                        }
+                    }
+            }
+
+            // Variant VCFs: PAVE when present, raw SAGE fallback (see findVariantVcf), else skipped
+            [
+                'somatic' : 'mutations and DBS/ID signatures',
+                'germline': 'germline mutations (CPSR)',
+            ].each { kind, steps ->
+                ch_samples_to_run
+                    .map { meta -> hasPaveVcf(meta, kind) ? 'pave' : (hasVariantVcf(meta, kind) ? 'sage' : 'none') }
+                    .toList()
+                    .subscribe { sources ->
+                        def n_sage = sources.count('sage')
+                        def n_none = sources.count('none')
+                        if (n_sage > 0) {
+                            log.warn "dna-only: no PAVE ${kind} VCF for ${n_sage}/${sources.size()} subject(s); using raw sage/${kind}/ (gnomAD_AF and HMF.* MAF columns empty for those)"
+                        }
+                        if (n_none > 0) {
+                            log.warn "dna-only: neither pave/${kind}/ nor sage/${kind}/ for ${n_none}/${sources.size()} subject(s); ${steps} skipped for those subjects"
+                        }
+                    }
+            }
+        }
 
         // ── Run subworkflows ──────────────────────────────────────────────────
 

@@ -22,6 +22,16 @@ Requires Nextflow >= 26.04.4.
   `ch_sage_germline_vcf`) and DBS/ID signature fitting (`ch_sigs_dbs`, `ch_sigs_id`). Raw SAGE
   carries no PAVE INFO, so `gnomAD_AF` and the `HMF.*` MAF columns stay empty for a fallback
   subject; a cohort can mix both sources, since the MAF columns are written unconditionally
+- `--type dna-only` skips steps per oncoanalyser tool: a subject whose `<folder>/<tool>/` directory
+  is absent (`purple`, `esvee`, `sigs`) is dropped from that tool's channels (`hasToolOutput()` in
+  `workflows/genomic.nf`, one summary warning per tool, not per subject). For the variant VCFs a
+  subject is dropped only when it has neither `pave/<kind>/` nor `sage/<kind>/` (`hasVariantVcf()`),
+  and the subjects that fell back to SAGE get their own summary warning. In
+  `GENOMIC_AGGREGATE_OUTPUT`, meta files and case lists are emitted only for data types
+  that produced output (e.g. WES without `sigs/` → no SBS data or SBS meta files); each case-list
+  label travels with its sample list and an empty (`toList()` → `""`) list is dropped. `.tpm.tsv`
+  is not `required` in `subjectOutputs()` under dna-only. "both" mode keeps the fixed meta and case lists
+- `cancer_type` must be an OncoTree code (https://oncotree.mskcc.org/) already in the target portal
 - R scripts → `container_r`; Python → `container_python`; SigProfiler → `container_sigprofiler`;
   VCF→MAF → `container_mafsmith`
 - **VCF→MAF is `MAFSMITH` (nf-osi/mafsmith), not vcf2maf** (since 4.0.0).

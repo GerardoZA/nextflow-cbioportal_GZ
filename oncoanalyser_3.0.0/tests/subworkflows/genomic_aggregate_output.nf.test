@@ -207,4 +207,92 @@ nextflow_workflow {
             assert !path("${params.outdir}/TEST/meta_expression.txt").exists()
         }
     }
+
+    test("type=dna-only — tools not run (no esvee, no sigs) leave no orphan meta files or case lists") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+                type   = 'dna-only'
+            }
+            workflow {
+                """
+                file("${params.outdir}/TEST").mkdirs()
+
+                input[0] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1-1DT'],
+                        file('${projectDir}/assets/test_data/precomputed/T1-1DT_data_cna_hg38.seg')
+                    ],
+                    [
+                        [group: 'TEST', subject: 'T2', sample: 'T2-T'],
+                        file('${projectDir}/assets/test_data/precomputed/T2-T_data_cna_hg38.seg')
+                    ]
+                )
+                input[1] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1-1DT'],
+                        file('${projectDir}/assets/test_data/precomputed/T1-1DT_data_cna_long.txt')
+                    ],
+                    [
+                        [group: 'TEST', subject: 'T2', sample: 'T2-T'],
+                        file('${projectDir}/assets/test_data/precomputed/T2-T_data_cna_long.txt')
+                    ]
+                )
+                input[2] = Channel.empty()   // no esvee/ → no SV
+                input[3] = Channel.empty()   // dna-only → no expression
+                input[4] = Channel.of(
+                    [
+                        [group: 'TEST', subject: 'T1', sample: 'T1-1DT'],
+                        file('${projectDir}/assets/test_data/precomputed/T1-1DT.somatic_rna_germline.maf')
+                    ],
+                    [
+                        [group: 'TEST', subject: 'T2', sample: 'T2-T'],
+                        file('${projectDir}/assets/test_data/precomputed/T2-T.somatic_rna_germline.maf')
+                    ]
+                )
+                input[5] = Channel.empty()   // no sigs/ → no SBS contribution
+                input[6] = Channel.empty()   // no sigs/ → no SBS counts
+                input[7] = Channel.empty()
+                input[8] = Channel.empty()
+                input[9] = Channel.empty()
+                input[10] = Channel.empty()
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+
+            // Data types with output: data, meta and case list present
+            assert path("${params.outdir}/TEST/data_cna_hg38.seg").exists()
+            assert path("${params.outdir}/TEST/data_mutations_dna_rna_germline.txt").exists()
+            assert path("${params.outdir}/TEST/meta_cna_hg38.txt").exists()
+            assert path("${params.outdir}/TEST/meta_cna_long.txt").exists()
+            assert path("${params.outdir}/TEST/meta_sequenced.txt").exists()
+            assert path("${params.outdir}/TEST/case_lists/cases_cnv.txt").exists()
+            assert path("${params.outdir}/TEST/case_lists/cases_sequenced.txt").exists()
+
+            // Case lists keep their own samples when another data type is empty
+            def seq_ids = path("${params.outdir}/TEST/case_lists/cases_sequenced.txt").readLines()
+                .find { it.startsWith('case_list_ids:') }
+            assert seq_ids.contains('T1-1DT') && seq_ids.contains('T2-T')
+            def seq_stable = path("${params.outdir}/TEST/case_lists/cases_sequenced.txt").readLines()
+                .find { it.startsWith('stable_id:') }
+            assert seq_stable.endsWith('_sequenced')
+
+            // SV not run: no data, meta or case list
+            assert !path("${params.outdir}/TEST/data_sv.txt").exists()
+            assert !path("${params.outdir}/TEST/meta_sv.txt").exists()
+            assert !path("${params.outdir}/TEST/case_lists/cases_sv.txt").exists()
+
+            // Signatures not run: no orphan meta files
+            ['contribution', 'counts'].each { kind ->
+                ['SBS', 'DBS', 'ID'].each { sig ->
+                    assert !path("${params.outdir}/TEST/meta_mutational_signatures_${kind}_${sig}.txt").exists()
+                }
+            }
+            assert !path("${params.outdir}/TEST/meta_expression.txt").exists()
+        }
+    }
 }
