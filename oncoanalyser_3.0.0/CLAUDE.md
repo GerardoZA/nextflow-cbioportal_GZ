@@ -16,7 +16,9 @@ Requires Nextflow >= 26.04.4.
   Mutational signature fitting (Sigs) is DNA-only either way, but its VCF may differ (below)
 - `--type dna-only` falls back per subject for the somatic/germline VCF: `findVariantVcf()` in
   `workflows/genomic.nf` reads `pave/{somatic,germline}/<subject>-T.pave.*.vcf.gz` when it
-  exists (as in "both" mode), and only otherwise the raw SAGE output,
+  exists (as in "both" mode), then the flat `pave/<subject>-T.pave.*.vcf.gz` that older
+  oncoanalyser runs write (`paveVcfPath()`; "both" mode never reads the flat layout), and
+  only otherwise the raw SAGE output,
   `sage/{somatic,germline}/<subject>-T.sage.*.vcf.gz`. A DNA-only oncoanalyser run may or may
   not write `pave/` — never assume either. Applies to mutations (`ch_sage_vcf`,
   `ch_sage_germline_vcf`) and DBS/ID signature fitting (`ch_sigs_dbs`, `ch_sigs_id`). Raw SAGE
@@ -25,7 +27,7 @@ Requires Nextflow >= 26.04.4.
 - `--type dna-only` skips steps per oncoanalyser tool: a subject whose `<folder>/<tool>/` directory
   is absent (`purple`, `esvee`, `sigs`) is dropped from that tool's channels (`hasToolOutput()` in
   `workflows/genomic.nf`, one summary warning per tool, not per subject). For the variant VCFs a
-  subject is dropped only when it has neither `pave/<kind>/` nor `sage/<kind>/` (`hasVariantVcf()`),
+  subject is dropped only when it has no PAVE VCF in either layout and no `sage/<kind>/` (`hasVariantVcf()`),
   and the subjects that fell back to SAGE get their own summary warning. In
   `GENOMIC_AGGREGATE_OUTPUT`, meta files and case lists are emitted only for data types
   that produced output (e.g. WES without `sigs/` → no SBS data or SBS meta files); each case-list

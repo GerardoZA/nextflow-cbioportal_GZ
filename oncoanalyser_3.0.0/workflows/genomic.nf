@@ -41,21 +41,40 @@ def findOncoFile(meta, path_str, label) {
 }
 
 
-// True when the subject's PAVE somatic or germline (kind) VCF exists and is non-empty.
-def hasPaveVcf(meta, kind) {
-    def f = file("${meta.folder}/pave/${kind}/${meta.subject}-T.pave.${kind}.vcf.gz", checkIfExists: false)
-    return f.exists() && !f.isEmpty()
+// Path of the subject's PAVE somatic or germline (kind) VCF, or null when none exists and is
+// non-empty. oncoanalyser 3.0 writes pave/<kind>/; dna-only also accepts the flat pave/ layout
+// of older oncoanalyser runs, checked second.
+def paveVcfPath(meta, kind) {
+    def name  = "${meta.subject}-T.pave.${kind}.vcf.gz"
+    def paths = ["${meta.folder}/pave/${kind}/${name}"]
+    if (isDnaOnly()) {
+        paths << "${meta.folder}/pave/${name}"
+    }
+    return paths.find { p ->
+        def f = file(p, checkIfExists: false)
+        f.exists() && !f.isEmpty()
+    }
 }
 
-// Somatic or germline (kind) variant VCF for a subject. "both" reads PAVE. dna-only prefers
-// PAVE too, and falls back to the raw SAGE VCF only when oncoanalyser wrote no PAVE file for
-// the subject (it can skip PAVE/sage_append without RNA). Raw SAGE carries no PAVE INFO, so
-// gnomAD_AF and the HMF.* MAF columns stay empty for a subject read from it.
+// True when the subject has a PAVE somatic or germline (kind) VCF (see paveVcfPath).
+def hasPaveVcf(meta, kind) {
+    return paveVcfPath(meta, kind) != null
+}
+
+// Somatic or germline (kind) variant VCF for a subject. "both" reads pave/<kind>/. dna-only
+// prefers PAVE too (pave/<kind>/, then flat pave/), and falls back to the raw SAGE VCF only
+// when oncoanalyser wrote no PAVE file for the subject (it can skip PAVE/sage_append without
+// RNA). Raw SAGE carries no PAVE INFO, so gnomAD_AF and the HMF.* MAF columns stay empty for
+// a subject read from it.
 def findVariantVcf(meta, kind, label) {
-    if (!isDnaOnly() || hasPaveVcf(meta, kind)) {
+    if (!isDnaOnly()) {
         return findOncoFile(meta,
             "${meta.folder}/pave/${kind}/${meta.subject}-T.pave.${kind}.vcf.gz",
             "${label} (PAVE ${kind})")
+    }
+    def pave = paveVcfPath(meta, kind)
+    if (pave) {
+        return findOncoFile(meta, pave, "${label} (PAVE ${kind})")
     }
     return findOncoFile(meta,
         "${meta.folder}/sage/${kind}/${meta.subject}-T.sage.${kind}.vcf.gz",
@@ -70,9 +89,10 @@ def hasToolOutput(meta, tool) {
     return !isDnaOnly() || file("${meta.folder}/${tool}", checkIfExists: false).isDirectory()
 }
 
-// A somatic or germline (kind) variant VCF can come from pave/ or, in dna-only, sage/.
+// A somatic or germline (kind) variant VCF can come from pave/<kind>/ or, in dna-only, the
+// flat pave/ layout or sage/<kind>/.
 def hasVariantVcf(meta, kind) {
-    return hasToolOutput(meta, "pave/${kind}") || hasToolOutput(meta, "sage/${kind}")
+    return hasToolOutput(meta, "pave/${kind}") || hasPaveVcf(meta, kind) || hasToolOutput(meta, "sage/${kind}")
 }
 
 // Every per-subject file this workflow publishes to <outdir>/<group>/<subject>/.
@@ -261,6 +281,7 @@ workflow GENOMIC {
         // File naming conventions (relative to folder), oncoanalyser 3.0 layout:
         //   pave/somatic/${subject}-T.pave.somatic.vcf.gz          — PAVE somatic DNA
         //   pave/germline/${subject}-T.pave.germline.vcf.gz        — PAVE germline DNA
+        //   (dna-only also accepts the older flat pave/${subject}-T.pave.{somatic,germline}.vcf.gz)
         //   sage_append/${subject}-T/${subject}-T.sage.append.vcf.gz — SAGE somatic RNA append
         //   esvee/${subject}-T.esvee.somatic.vcf.gz
         //   purple/${subject}-T.purple.cnv.somatic.tsv
@@ -428,7 +449,7 @@ workflow GENOMIC {
                             log.warn "dna-only: no PAVE ${kind} VCF for ${n_sage}/${sources.size()} subject(s); using raw sage/${kind}/ (gnomAD_AF and HMF.* MAF columns empty for those)"
                         }
                         if (n_none > 0) {
-                            log.warn "dna-only: neither pave/${kind}/ nor sage/${kind}/ for ${n_none}/${sources.size()} subject(s); ${steps} skipped for those subjects"
+                            log.warn "dna-only: no PAVE ${kind} VCF and no sage/${kind}/ for ${n_none}/${sources.size()} subject(s); ${steps} skipped for those subjects"
                         }
                     }
             }

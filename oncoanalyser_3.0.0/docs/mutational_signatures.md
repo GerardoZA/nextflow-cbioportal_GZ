@@ -25,7 +25,7 @@ Three signature types (SBS, DBS, ID) are fitted against COSMIC v3.6 GRCh38 refer
 
 **Contribution** (`data_mutational_signatures_contribution_DBS.txt`):
 
-- Input: `{subject}-T.pave.somatic.vcf.gz` (under `--type dna-only`, `{subject}-T.sage.somatic.vcf.gz` when the subject has no PAVE VCF) — extracts adjacent SNV pairs + 2bp MNVs → 78-channel DBS matrix
+- Input: `{subject}-T.pave.somatic.vcf.gz` (under `--type dna-only`, also from the flat `pave/` layout, and `{subject}-T.sage.somatic.vcf.gz` when the subject has no PAVE VCF) — extracts adjacent SNV pairs + 2bp MNVs → 78-channel DBS matrix
 - Script: `bin/run_sigprofiler_dbs.py` → `Analyzer.cosmic_fit(context_type="DINUC")`
 - Metadata: `genomic/cosmic_mutational_signatures/cosmic_dbs_metadata.tsv` (resource kit)
 - Strand normalization to 10 canonical ref dinucleotides (AC, AT, CC, CG, CT, GC, TA, TC, TG, TT)
@@ -39,7 +39,7 @@ Three signature types (SBS, DBS, ID) are fitted against COSMIC v3.6 GRCh38 refer
 
 **Contribution** (`data_mutational_signatures_contribution_ID.txt`):
 
-- Input: `{subject}-T.pave.somatic.vcf.gz` (under `--type dna-only`, `{subject}-T.sage.somatic.vcf.gz` when the subject has no PAVE VCF) — extracts indels → 83-channel ID matrix via pysam + reference FASTA
+- Input: `{subject}-T.pave.somatic.vcf.gz` (under `--type dna-only`, also from the flat `pave/` layout, and `{subject}-T.sage.somatic.vcf.gz` when the subject has no PAVE VCF) — extracts indels → 83-channel ID matrix via pysam + reference FASTA
 - Script: `bin/run_sigprofiler_id.py` → `Analyzer.cosmic_fit(context_type="ID")`
 - Metadata: `genomic/cosmic_mutational_signatures/cosmic_id_metadata.tsv` (resource kit)
 - 83-channel classification: 1bp C/T del/ins at homopolymers (24) + 2-5bp repeat-mediated del/ins (48) + 2-5bp microhomology del (11)

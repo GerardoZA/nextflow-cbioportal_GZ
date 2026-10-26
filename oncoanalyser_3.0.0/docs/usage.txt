@@ -135,6 +135,8 @@ GENOMIC SAMPLESHEET
     |   |   +-- <subject_id>-T.pave.somatic.vcf.gz     Somatic DNA mutations
     |   +-- germline/
     |       +-- <subject_id>-T.pave.germline.vcf.gz    Germline DNA mutations
+    |       (--type dna-only also reads both VCFs directly under pave/,
+    |        the layout of older oncoanalyser runs)
     |-- sage_append/
     |   +-- <subject_id>-T/
     |       +-- <subject_id>-T.sage.append.vcf.gz      RNA-supported somatic
